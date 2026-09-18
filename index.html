@@ -1,0 +1,368 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mutation Practice</title>
+<style>
+  :root {
+    --bg: #fafaf7;
+    --panel: #ffffff;
+    --border: #e0e0da;
+    --text: #24241f;
+    --muted: #6b6b63;
+    --accent: #2f5fe0;
+    --ok: #2e7d32;
+    --bad: #c62828;
+    --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    padding: 20px;
+  }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .subtitle { color: var(--muted); font-size: 13px; margin-bottom: 18px; max-width: 780px; }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    margin-bottom: 16px;
+  }
+  .panel h2 { font-size: 14px; margin: 0 0 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .source-file-entry {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px;
+    margin-bottom: 10px;
+  }
+  .source-file-entry .row { display: flex; align-items: center; gap: 12px; margin-bottom: 6px; flex-wrap: wrap; }
+  .source-file-entry input[type="text"] {
+    font-family: var(--mono);
+    padding: 6px 8px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    width: 220px;
+  }
+  textarea {
+    width: 100%;
+    min-height: 140px;
+    font-family: var(--mono);
+    font-size: 12.5px;
+    padding: 8px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    resize: vertical;
+    tab-size: 4;
+  }
+  #mutated-editor { min-height: 260px; }
+  button {
+    background: var(--accent);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 8px 14px;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  button.secondary { background: #e5e5df; color: var(--text); }
+  button.danger { background: #fbe4e4; color: var(--bad); }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  button + button { margin-left: 8px; }
+  .hint { font-size: 12px; color: var(--muted); margin-top: 6px; }
+  #status-line { font-size: 13px; margin-bottom: 12px; }
+  #result-line { font-size: 14px; font-weight: 600; margin: 10px 0; }
+  #result-line.ok { color: var(--ok); }
+  #result-line.bad { color: var(--bad); }
+  #diff-output {
+    background: #1c1c18;
+    color: #d8d8cf;
+    font-family: var(--mono);
+    font-size: 12px;
+    padding: 10px;
+    border-radius: 6px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 360px;
+    overflow-y: auto;
+  }
+  [hidden] { display: none !important; }
+  .spinner { font-size: 13px; color: var(--muted); }
+</style>
+</head>
+<body>
+
+<h1>Mutation Practice</h1>
+<div class="subtitle">
+  Paste your own already-correct source file(s) and its test file, plant one verified mutation, and
+  hunt it down yourself &mdash; no hints, no diff, nothing revealed until you've either fixed it or
+  tried three times. This runs entirely in your browser (Python via Pyodide); nothing you paste is
+  ever sent anywhere or committed to this site's repo.
+</div>
+
+<div id="status-line" class="spinner">Loading Python runtime&hellip;</div>
+
+<div class="panel" id="setup-panel">
+  <h2>Your code</h2>
+  <div id="source-files-list"></div>
+  <button id="add-source-file" class="secondary" type="button">+ Add another source file</button>
+
+  <div class="source-file-entry" style="margin-top: 14px;">
+    <div class="row">
+      <label>Test module name</label>
+      <input type="text" id="test-module-name" placeholder="e.g. test_heap">
+    </div>
+    <textarea id="test-module-code" placeholder="Paste your test file's source here."></textarea>
+  </div>
+
+  <button id="plant-btn" disabled>Plant Mutation</button>
+  <div class="hint">Saved to your browser's local storage only, so you don't have to re-paste every visit.</div>
+</div>
+
+<div class="panel" id="mutated-panel" hidden>
+  <h2>Hunt for the bug</h2>
+  <div class="hint" id="target-label"></div>
+  <textarea id="mutated-editor" spellcheck="false"></textarea>
+  <div>
+    <button id="check-btn">Check My Fix</button>
+    <button id="reveal-btn" class="danger" hidden>Reveal</button>
+    <button id="new-mutation-btn" class="secondary">New Mutation</button>
+  </div>
+  <div id="result-line"></div>
+  <pre id="diff-output" hidden></pre>
+</div>
+
+<script src="https://cdn.jsdelivr.net/pyodide/v0.28.0/full/pyodide.js"></script>
+<script>
+let pyodide = null;
+let plantedOriginal = null;   // the pristine source of the target module at plant time
+let plantedMutated = null;    // the mutated source the engine actually planted
+let currentTarget = null;
+let currentTestName = null;
+let attempts = 0;
+
+const STORAGE_KEY = "mutation-practice-v1";
+
+function setStatus(text) {
+  document.getElementById("status-line").textContent = text;
+}
+
+function sourceFileEntryHTML(name = "", code = "", checked = false) {
+  return `
+    <div class="source-file-entry" data-entry>
+      <div class="row">
+        <label>Module name</label>
+        <input type="text" class="module-name" placeholder="e.g. heap" value="${escapeAttr(name)}">
+        <label><input type="radio" name="mutate-target" class="mutate-target" ${checked ? "checked" : ""}> Mutate this one</label>
+        <button type="button" class="secondary remove-file">Remove</button>
+      </div>
+      <textarea class="module-code" placeholder="Paste this file's Python source here.">${escapeHtml(code)}</textarea>
+    </div>`;
+}
+
+function escapeHtml(s) {
+  const div = document.createElement("div");
+  div.textContent = s;
+  return div.innerHTML;
+}
+function escapeAttr(s) {
+  return String(s).replace(/"/g, "&quot;");
+}
+
+function addSourceFile(name = "", code = "", checked = false) {
+  const list = document.getElementById("source-files-list");
+  const wrapper = document.createElement("div");
+  wrapper.innerHTML = sourceFileEntryHTML(name, code, checked);
+  const entry = wrapper.firstElementChild;
+  list.appendChild(entry);
+  entry.querySelector(".remove-file").addEventListener("click", () => {
+    entry.remove();
+    saveToLocalStorage();
+    validatePlantButton();
+  });
+  entry.querySelectorAll("input, textarea").forEach((el) => {
+    el.addEventListener("input", () => { saveToLocalStorage(); validatePlantButton(); });
+    el.addEventListener("change", () => { saveToLocalStorage(); validatePlantButton(); });
+  });
+  validatePlantButton();
+}
+
+function collectSourceFiles() {
+  const entries = [...document.querySelectorAll("#source-files-list [data-entry]")];
+  const sources = {};
+  let target = null;
+  for (const entry of entries) {
+    const name = entry.querySelector(".module-name").value.trim();
+    const code = entry.querySelector(".module-code").value;
+    if (!name || !code.trim()) continue;
+    sources[name] = code;
+    if (entry.querySelector(".mutate-target").checked) target = name;
+  }
+  return { sources, target };
+}
+
+function validatePlantButton() {
+  const { sources, target } = collectSourceFiles();
+  const testName = document.getElementById("test-module-name").value.trim();
+  const testCode = document.getElementById("test-module-code").value.trim();
+  const ready = pyodide && Object.keys(sources).length > 0 && !!target && !!testName && !!testCode;
+  document.getElementById("plant-btn").disabled = !ready;
+}
+
+function saveToLocalStorage() {
+  try {
+    const entries = [...document.querySelectorAll("#source-files-list [data-entry]")].map((entry) => ({
+      name: entry.querySelector(".module-name").value,
+      code: entry.querySelector(".module-code").value,
+      checked: entry.querySelector(".mutate-target").checked,
+    }));
+    const payload = {
+      entries,
+      testName: document.getElementById("test-module-name").value,
+      testCode: document.getElementById("test-module-code").value,
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+  } catch (err) {
+    // localStorage can throw in private browsing / disabled-storage contexts -- non-fatal
+  }
+}
+
+function loadFromLocalStorage() {
+  let payload = null;
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) payload = JSON.parse(raw);
+  } catch (err) {
+    payload = null;
+  }
+  if (payload && payload.entries && payload.entries.length) {
+    for (const e of payload.entries) addSourceFile(e.name, e.code, e.checked);
+    document.getElementById("test-module-name").value = payload.testName || "";
+    document.getElementById("test-module-code").value = payload.testCode || "";
+  } else {
+    addSourceFile("", "", true);
+  }
+  validatePlantButton();
+}
+
+document.getElementById("add-source-file").addEventListener("click", () => addSourceFile());
+document.getElementById("test-module-name").addEventListener("input", () => { saveToLocalStorage(); validatePlantButton(); });
+document.getElementById("test-module-code").addEventListener("input", () => { saveToLocalStorage(); validatePlantButton(); });
+
+function callPy(fnName, payloadObj) {
+  const fn = pyodide.globals.get(fnName);
+  try {
+    const resultStr = fn(JSON.stringify(payloadObj));
+    return JSON.parse(resultStr);
+  } finally {
+    fn.destroy();
+  }
+}
+
+function showResult(text, cls) {
+  const el = document.getElementById("result-line");
+  el.textContent = text;
+  el.className = cls || "";
+}
+
+function hideDiff() {
+  const el = document.getElementById("diff-output");
+  el.hidden = true;
+  el.textContent = "";
+}
+
+function showDiff() {
+  const result = callPy("diff_json", { original: plantedOriginal, mutated: plantedMutated });
+  const el = document.getElementById("diff-output");
+  el.textContent = result.diff || "(no textual diff)";
+  el.hidden = false;
+}
+
+document.getElementById("plant-btn").addEventListener("click", () => {
+  const { sources, target } = collectSourceFiles();
+  const testName = document.getElementById("test-module-name").value.trim();
+  const testSource = document.getElementById("test-module-code").value;
+
+  const result = callPy("plant_json", { target, sources, test_name: testName, test_source: testSource });
+  if (!result.ok) {
+    setStatus(result.error);
+    return;
+  }
+  setStatus("Ready.");
+  currentTarget = target;
+  currentTestName = testName;
+  plantedOriginal = sources[target];
+  plantedMutated = result.mutated_source;
+  attempts = 0;
+
+  document.getElementById("target-label").textContent = `Target: ${target}.py`;
+  document.getElementById("mutated-editor").value = result.mutated_source;
+  document.getElementById("reveal-btn").hidden = true;
+  hideDiff();
+  showResult("", "");
+  document.getElementById("mutated-panel").hidden = false;
+  document.getElementById("mutated-panel").scrollIntoView({ behavior: "smooth", block: "start" });
+});
+
+document.getElementById("check-btn").addEventListener("click", () => {
+  const { sources } = collectSourceFiles();
+  const allModuleNames = [...Object.keys(sources), currentTestName];
+  const candidateSource = document.getElementById("mutated-editor").value;
+
+  const result = callPy("check_fix_json", {
+    target: currentTarget,
+    candidate_source: candidateSource,
+    all_module_names: allModuleNames,
+    test_name: currentTestName,
+  });
+
+  if (result.passed) {
+    showResult("Fixed it! Tests pass.", "ok");
+    showDiff();
+    document.getElementById("reveal-btn").hidden = true;
+  } else {
+    attempts += 1;
+    showResult(`Still failing (attempt ${attempts}).`, "bad");
+    if (attempts >= 3) {
+      document.getElementById("reveal-btn").hidden = false;
+    }
+  }
+});
+
+document.getElementById("reveal-btn").addEventListener("click", () => {
+  showDiff();
+});
+
+document.getElementById("new-mutation-btn").addEventListener("click", () => {
+  document.getElementById("plant-btn").click();
+});
+
+async function boot() {
+  pyodide = await loadPyodide();
+  const [operatorsSrc, engineSrc] = await Promise.all([
+    fetch("py/operators.py").then((r) => r.text()),
+    fetch("py/web_engine.py").then((r) => r.text()),
+  ]);
+  pyodide.FS.mkdirTree("/py");
+  pyodide.FS.writeFile("/py/operators.py", operatorsSrc);
+  pyodide.FS.writeFile("/py/web_engine.py", engineSrc);
+  pyodide.runPython(`
+import sys
+if "/py" not in sys.path:
+    sys.path.insert(0, "/py")
+from web_engine import plant_json, check_fix_json, diff_json
+`);
+  setStatus("Ready.");
+  loadFromLocalStorage();
+}
+
+boot().catch((err) => {
+  setStatus("Failed to load Python runtime: " + err);
+});
+</script>
+</body>
+</html>

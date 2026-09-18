@@ -98,10 +98,10 @@
 
 <h1>Mutation Practice</h1>
 <div class="subtitle">
-  Paste your own already-correct source file(s) and its test file, plant one verified mutation, and
-  hunt it down yourself &mdash; no hints, no diff, nothing revealed until you've either fixed it or
-  tried three times. This runs entirely in your browser (Python via Pyodide); nothing you paste is
-  ever sent anywhere or committed to this site's repo.
+  Paste or upload your own already-correct source file(s) and its test file, plant one verified
+  mutation, and hunt it down yourself &mdash; no hints, no diff, nothing revealed until you've
+  either fixed it or tried three times. This runs entirely in your browser (Python via Pyodide);
+  nothing you paste or upload is ever sent anywhere or committed to this site's repo.
 </div>
 
 <div id="status-line" class="spinner">Loading Python runtime&hellip;</div>
@@ -109,12 +109,22 @@
 <div class="panel" id="setup-panel">
   <h2>Your code</h2>
   <div id="source-files-list"></div>
-  <button id="add-source-file" class="secondary" type="button">+ Add another source file</button>
+  <div class="row" style="margin-bottom: 10px;">
+    <button id="add-source-file" class="secondary" type="button">+ Add another source file</button>
+    <label class="secondary" style="display:inline-flex; align-items:center; gap:6px; padding:8px 14px; border-radius:6px; background:#e5e5df; cursor:pointer;">
+      Upload .py file(s)
+      <input type="file" id="upload-source-files" accept=".py" multiple style="display:none;">
+    </label>
+  </div>
 
   <div class="source-file-entry" style="margin-top: 14px;">
     <div class="row">
       <label>Test module name</label>
       <input type="text" id="test-module-name" placeholder="e.g. test_heap">
+      <label class="secondary" style="display:inline-flex; align-items:center; gap:6px; padding:6px 12px; border-radius:6px; background:#e5e5df; cursor:pointer; font-size:13px;">
+        Upload test file
+        <input type="file" id="upload-test-file" accept=".py" style="display:none;">
+      </label>
     </div>
     <textarea id="test-module-code" placeholder="Paste your test file's source here."></textarea>
   </div>
@@ -190,6 +200,57 @@ function addSourceFile(name = "", code = "", checked = false) {
   });
   validatePlantButton();
 }
+
+function fillOrAddSourceFile(name, code, checked) {
+  // Reuse a still-empty entry (e.g. the default blank one present on load)
+  // instead of leaving it dangling alongside a new entry for an uploaded file.
+  const entries = [...document.querySelectorAll("#source-files-list [data-entry]")];
+  const empty = entries.find(
+    (en) => !en.querySelector(".module-name").value.trim() && !en.querySelector(".module-code").value.trim()
+  );
+  if (empty) {
+    empty.querySelector(".module-name").value = name;
+    empty.querySelector(".module-code").value = code;
+    if (checked) empty.querySelector(".mutate-target").checked = true;
+    empty.querySelector(".module-name").dispatchEvent(new Event("input", { bubbles: true }));
+  } else {
+    addSourceFile(name, code, checked);
+  }
+}
+
+function stripPyExtension(filename) {
+  return filename.replace(/\.py$/i, "");
+}
+
+document.getElementById("upload-source-files").addEventListener("change", async (e) => {
+  const files = [...e.target.files];
+  let anyTargetChecked = [...document.querySelectorAll(".mutate-target")].some((r) => r.checked);
+  for (const file of files) {
+    const text = await file.text();
+    const name = stripPyExtension(file.name);
+    const testNameField = document.getElementById("test-module-name");
+    const testCodeField = document.getElementById("test-module-code");
+    if (name.startsWith("test_") && !testNameField.value.trim() && !testCodeField.value.trim()) {
+      testNameField.value = name;
+      testCodeField.value = text;
+      testNameField.dispatchEvent(new Event("input", { bubbles: true }));
+      continue;
+    }
+    fillOrAddSourceFile(name, text, !anyTargetChecked);
+    anyTargetChecked = true;
+  }
+  e.target.value = ""; // allow re-selecting the same file(s) again later
+});
+
+document.getElementById("upload-test-file").addEventListener("change", async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const text = await file.text();
+  document.getElementById("test-module-name").value = stripPyExtension(file.name);
+  document.getElementById("test-module-code").value = text;
+  document.getElementById("test-module-name").dispatchEvent(new Event("input", { bubbles: true }));
+  e.target.value = "";
+});
 
 function collectSourceFiles() {
   const entries = [...document.querySelectorAll("#source-files-list [data-entry]")];

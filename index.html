@@ -130,6 +130,7 @@
   </div>
 
   <button id="plant-btn" disabled>Plant Mutation</button>
+  <div class="hint" id="plant-readiness"></div>
   <div class="hint">Saved to your browser's local storage only, so you don't have to re-paste every visit.</div>
 </div>
 
@@ -270,8 +271,31 @@ function validatePlantButton() {
   const { sources, target } = collectSourceFiles();
   const testName = document.getElementById("test-module-name").value.trim();
   const testCode = document.getElementById("test-module-code").value.trim();
-  const ready = pyodide && Object.keys(sources).length > 0 && !!target && !!testName && !!testCode;
-  document.getElementById("plant-btn").disabled = !ready;
+
+  const missing = [];
+  if (!pyodide) missing.push("Python runtime is still loading");
+  if (Object.keys(sources).length === 0) {
+    missing.push("a source file with both a module name and code");
+  } else if (!target) {
+    // A radio can be checked on an entry that's still missing a name/code,
+    // in which case collectSourceFiles() silently drops it from `sources`
+    // and `target` stays null -- surface that specifically, since otherwise
+    // the button just stays disabled with no visible reason.
+    const checkedButIncomplete = [...document.querySelectorAll("#source-files-list [data-entry]")].some(
+      (entry) => entry.querySelector(".mutate-target").checked
+    );
+    missing.push(
+      checkedButIncomplete
+        ? 'the file marked "Mutate this one" needs both a module name and code'
+        : 'check "Mutate this one" on the file you want mutated'
+    );
+  }
+  if (!testName) missing.push("a test module name");
+  if (!testCode) missing.push("your test file's code");
+
+  document.getElementById("plant-btn").disabled = missing.length > 0;
+  document.getElementById("plant-readiness").textContent =
+    missing.length > 0 ? "Still needed: " + missing.join("; ") + "." : "";
 }
 
 function saveToLocalStorage() {

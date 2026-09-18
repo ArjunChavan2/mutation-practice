@@ -16,11 +16,17 @@ lives only in that tab's in-memory filesystem and optionally in your own browser
 ## Using it
 
 Open the deployed GitHub Pages URL (or `index.html` locally via a static file server — Pyodide needs
-an actual `http(s)://` origin, not `file://`). Paste each source file's code with its module name
-(add more for multi-file dependencies, e.g. a planner file that imports a heap file), mark which one
-to mutate, paste your test file, and hit **Plant Mutation**. Edit the mutated code in place and hit
-**Check My Fix**; after three failed attempts (or once you succeed), **Reveal** shows the diff and
-which mutation operator was used.
+an actual `http(s)://` origin, not `file://`). Your files are laid out as horizontal, code-editor-style
+tabs: click **+** to add a source file, give it a module name, and paste (or upload) its code —
+add more for multi-file dependencies (e.g. a planner file that imports a heap file). Click the
+**&#9675;** on a tab to mark it the one to mutate (it turns into &#9679;); the fixed, distinctly
+colored **T** tab holds your test file. Hit **Plant Mutation**, edit the mutated code in place, and
+hit **Check My Fix**; after three failed attempts (or once you succeed), **Reveal** shows the diff
+and which mutation operator was used.
+
+The test file can't be auto-derived from the source file being mutated — it needs to be genuinely
+different content, since it's the `unittest` assertions in the test file that the engine actually
+runs to decide whether a mutation (or your fix) changed behavior.
 
 ## Limitations
 

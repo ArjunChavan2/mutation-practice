@@ -6,15 +6,20 @@
 <title>Mutation Practice</title>
 <style>
   :root {
-    --bg: #fafaf7;
-    --panel: #ffffff;
-    --border: #e0e0da;
-    --text: #24241f;
-    --muted: #6b6b63;
-    --accent: #2f5fe0;
-    --ok: #2e7d32;
-    --bad: #c62828;
-    --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+    --bg: #1e1e1e;
+    --panel: #252526;
+    --panel-alt: #2d2d2d;
+    --border: #3c3c3c;
+    --text: #d4d4d4;
+    --muted: #9d9d9d;
+    --accent: #0e7fd1;
+    --accent-hover: #1a8fe0;
+    --ok: #89d185;
+    --bad: #f48771;
+    --target: #e2a33d;
+    --test-color: #4ec9b0;
+    --editor-bg: #1e1e1e;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
   }
   * { box-sizing: border-box; }
   body {
@@ -24,66 +29,154 @@
     color: var(--text);
     padding: 20px;
   }
-  h1 { font-size: 22px; margin: 0 0 4px; }
+  h1 { font-size: 22px; margin: 0 0 4px; color: #f3f3f3; }
   .subtitle { color: var(--muted); font-size: 13px; margin-bottom: 18px; max-width: 780px; }
+  code { background: #2d2d2d; padding: 1px 4px; border-radius: 3px; font-family: var(--mono); }
   .panel {
     background: var(--panel);
     border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 16px;
+    border-radius: 8px;
+    padding: 14px;
     margin-bottom: 16px;
   }
-  .panel h2 { font-size: 14px; margin: 0 0 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
-  .source-file-entry {
+  .panel h2 { font-size: 12px; margin: 0 0 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+
+  /* -- tab bar (code-editor style) ------------------------------------- */
+  #tab-bar {
+    display: flex;
+    align-items: stretch;
+    gap: 2px;
+    overflow-x: auto;
+    background: var(--panel-alt);
     border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 10px;
-    margin-bottom: 10px;
+    border-bottom: none;
+    border-radius: 6px 6px 0 0;
+    padding: 4px 4px 0;
   }
-  .source-file-entry .row { display: flex; align-items: center; gap: 12px; margin-bottom: 6px; flex-wrap: wrap; }
-  .source-file-entry input[type="text"] {
-    font-family: var(--mono);
-    padding: 6px 8px;
+  .tab {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 8px 7px 10px;
+    background: #232323;
     border: 1px solid var(--border);
-    border-radius: 6px;
+    border-bottom: none;
+    border-radius: 6px 6px 0 0;
+    font-size: 12.5px;
+    font-family: var(--mono);
+    color: var(--muted);
+    cursor: pointer;
+    white-space: nowrap;
+    position: relative;
+    top: 1px;
+  }
+  .tab.active {
+    background: var(--editor-bg);
+    color: var(--text);
+    border-color: var(--border);
+    box-shadow: inset 0 2px 0 var(--accent);
+  }
+  .tab.is-target .tab-star { color: var(--target); }
+  .tab.is-target.active { box-shadow: inset 0 2px 0 var(--target); }
+  .tab-star, .tab-close {
+    background: none;
+    border: none;
+    color: inherit;
+    cursor: pointer;
+    padding: 0;
+    font-size: 13px;
+    line-height: 1;
+    width: 16px;
+    height: 16px;
+    border-radius: 3px;
+  }
+  .tab-star:hover, .tab-close:hover { background: #3c3c3c; }
+  .tab-close { color: var(--muted); font-size: 15px; }
+  .tab.add-tab {
+    justify-content: center;
+    min-width: 30px;
+    color: var(--muted);
+    border-style: dashed;
+  }
+  .tab.add-tab:hover { color: var(--text); background: #2a2a2a; }
+  .tab.test-tab { border-color: #2f4f48; }
+  .tab.test-tab.active { box-shadow: inset 0 2px 0 var(--test-color); }
+  .tab-icon {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 15px; height: 15px; border-radius: 3px;
+    background: var(--test-color); color: #10221d; font-size: 10px; font-weight: 700;
+  }
+
+  #editor-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--editor-bg);
+    border: 1px solid var(--border);
+    border-top: none;
+    padding: 8px 10px;
+    flex-wrap: wrap;
+  }
+  #editor-toolbar label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  #active-name {
+    font-family: var(--mono);
+    font-size: 13px;
+    padding: 5px 8px;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    background: #2d2d2d;
+    color: var(--text);
     width: 220px;
   }
+  #active-name:focus { outline: 1px solid var(--accent); }
+
   textarea {
     width: 100%;
-    min-height: 140px;
+    min-height: 320px;
     font-family: var(--mono);
-    font-size: 12.5px;
-    padding: 8px;
+    font-size: 13px;
+    line-height: 1.5;
+    padding: 12px;
     border: 1px solid var(--border);
-    border-radius: 6px;
+    border-top: none;
+    border-radius: 0 0 6px 6px;
     resize: vertical;
     tab-size: 4;
+    background: var(--editor-bg);
+    color: var(--text);
   }
-  #mutated-editor { min-height: 260px; }
+  textarea:focus { outline: none; }
+  #mutated-editor { min-height: 300px; border-radius: 6px; border-top: 1px solid var(--border); }
+
   button {
     background: var(--accent);
-    color: white;
+    color: #fff;
     border: none;
     border-radius: 6px;
     padding: 8px 14px;
     font-size: 13px;
     cursor: pointer;
   }
-  button.secondary { background: #e5e5df; color: var(--text); }
-  button.danger { background: #fbe4e4; color: var(--bad); }
+  button:hover { background: var(--accent-hover); }
+  button.secondary { background: #3a3a3a; color: var(--text); }
+  button.secondary:hover { background: #454545; }
+  button.danger { background: #4b2320; color: var(--bad); }
+  button.danger:hover { background: #5a2b27; }
   button:disabled { opacity: .5; cursor: not-allowed; }
   button + button { margin-left: 8px; }
+  .row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
   .hint { font-size: 12px; color: var(--muted); margin-top: 6px; }
-  #status-line { font-size: 13px; margin-bottom: 12px; }
+  #status-line { font-size: 13px; margin-bottom: 12px; color: var(--muted); }
   #result-line { font-size: 14px; font-weight: 600; margin: 10px 0; }
   #result-line.ok { color: var(--ok); }
   #result-line.bad { color: var(--bad); }
   #diff-output {
-    background: #1c1c18;
-    color: #d8d8cf;
+    background: #161616;
+    color: #d4d4d4;
     font-family: var(--mono);
     font-size: 12px;
     padding: 10px;
+    border: 1px solid var(--border);
     border-radius: 6px;
     white-space: pre-wrap;
     word-break: break-word;
@@ -91,7 +184,13 @@
     overflow-y: auto;
   }
   [hidden] { display: none !important; }
-  .spinner { font-size: 13px; color: var(--muted); }
+  .upload-btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 8px 12px; border-radius: 6px;
+    background: #3a3a3a; color: var(--text); cursor: pointer; font-size: 12.5px;
+    white-space: nowrap;
+  }
+  .upload-btn:hover { background: #454545; }
 </style>
 </head>
 <body>
@@ -104,41 +203,38 @@
   nothing you paste or upload is ever sent anywhere or committed to this site's repo.
 </div>
 
-<div id="status-line" class="spinner">Loading Python runtime&hellip;</div>
+<div id="status-line">Loading Python runtime&hellip;</div>
 
 <div class="panel" id="setup-panel">
   <h2>Your code</h2>
-  <div id="source-files-list"></div>
-  <div class="row" style="margin-bottom: 10px;">
-    <button id="add-source-file" class="secondary" type="button">+ Add another source file</button>
-    <label class="secondary" style="display:inline-flex; align-items:center; gap:6px; padding:8px 14px; border-radius:6px; background:#e5e5df; cursor:pointer;">
-      Upload .py file(s)
+  <div class="row" style="margin-bottom: 8px;">
+    <label class="upload-btn">
+      Upload source file(s)
       <input type="file" id="upload-source-files" accept=".py" multiple style="display:none;">
+    </label>
+    <label class="upload-btn">
+      Upload test file
+      <input type="file" id="upload-test-file" accept=".py" style="display:none;">
     </label>
   </div>
 
-  <div class="source-file-entry" style="margin-top: 14px;">
-    <div class="row">
-      <label>Test module name</label>
-      <input type="text" id="test-module-name" placeholder="e.g. test_heap">
-      <label class="secondary" style="display:inline-flex; align-items:center; gap:6px; padding:6px 12px; border-radius:6px; background:#e5e5df; cursor:pointer; font-size:13px;">
-        Upload test file
-        <input type="file" id="upload-test-file" accept=".py" style="display:none;">
-      </label>
-    </div>
-    <textarea id="test-module-code" placeholder="Paste your test file's source here."></textarea>
+  <div id="tab-bar"></div>
+  <div id="editor-toolbar">
+    <label for="active-name">Module name</label>
+    <input type="text" id="active-name" placeholder="e.g. heap">
   </div>
+  <textarea id="active-editor" spellcheck="false" placeholder="Paste this file's Python source here."></textarea>
 
-  <button id="plant-btn" disabled>Plant Mutation</button>
+  <button id="plant-btn" disabled style="margin-top:12px;">Plant Mutation</button>
   <div class="hint" id="plant-readiness"></div>
-  <div class="hint">Saved to your browser's local storage only, so you don't have to re-paste every visit.</div>
+  <div class="hint">Click the &#9675; on a tab to mark it the one to mutate. Saved to your browser's local storage only.</div>
 </div>
 
 <div class="panel" id="mutated-panel" hidden>
   <h2>Hunt for the bug</h2>
   <div class="hint" id="target-label"></div>
   <textarea id="mutated-editor" spellcheck="false"></textarea>
-  <div>
+  <div style="margin-top:10px;">
     <button id="check-btn">Check My Fix</button>
     <button id="reveal-btn" class="danger" hidden>Reveal</button>
     <button id="new-mutation-btn" class="secondary">New Mutation</button>
@@ -156,23 +252,19 @@ let currentTarget = null;
 let currentTestName = null;
 let attempts = 0;
 
-const STORAGE_KEY = "mutation-practice-v1";
+const STORAGE_KEY = "mutation-practice-v2";
+
+// -- data model: files is an array of source-file tabs; testFile is the one
+// fixed, non-removable tab. activeId is either a file's id or the string
+// "TEST". The shared #active-editor textarea always reflects whichever is
+// active; switching tabs loads/saves its content into this model. ---------
+let files = [];
+let testFile = { name: "", code: "" };
+let activeId = null;
+let nextId = 1;
 
 function setStatus(text) {
   document.getElementById("status-line").textContent = text;
-}
-
-function sourceFileEntryHTML(name = "", code = "", checked = false) {
-  return `
-    <div class="source-file-entry" data-entry>
-      <div class="row">
-        <label>Module name</label>
-        <input type="text" class="module-name" placeholder="e.g. heap" value="${escapeAttr(name)}">
-        <label><input type="radio" name="mutate-target" class="mutate-target" ${checked ? "checked" : ""}> Mutate this one</label>
-        <button type="button" class="secondary remove-file">Remove</button>
-      </div>
-      <textarea class="module-code" placeholder="Paste this file's Python source here.">${escapeHtml(code)}</textarea>
-    </div>`;
 }
 
 function escapeHtml(s) {
@@ -180,114 +272,213 @@ function escapeHtml(s) {
   div.textContent = s;
   return div.innerHTML;
 }
-function escapeAttr(s) {
-  return String(s).replace(/"/g, "&quot;");
-}
-
-function addSourceFile(name = "", code = "", checked = false) {
-  const list = document.getElementById("source-files-list");
-  const wrapper = document.createElement("div");
-  wrapper.innerHTML = sourceFileEntryHTML(name, code, checked);
-  const entry = wrapper.firstElementChild;
-  list.appendChild(entry);
-  entry.querySelector(".remove-file").addEventListener("click", () => {
-    entry.remove();
-    saveToLocalStorage();
-    validatePlantButton();
-  });
-  entry.querySelectorAll("input, textarea").forEach((el) => {
-    el.addEventListener("input", () => { saveToLocalStorage(); validatePlantButton(); });
-    el.addEventListener("change", () => { saveToLocalStorage(); validatePlantButton(); });
-  });
-  validatePlantButton();
-}
-
-function fillOrAddSourceFile(name, code, checked) {
-  // Reuse a still-empty entry (e.g. the default blank one present on load)
-  // instead of leaving it dangling alongside a new entry for an uploaded file.
-  const entries = [...document.querySelectorAll("#source-files-list [data-entry]")];
-  const empty = entries.find(
-    (en) => !en.querySelector(".module-name").value.trim() && !en.querySelector(".module-code").value.trim()
-  );
-  if (empty) {
-    empty.querySelector(".module-name").value = name;
-    empty.querySelector(".module-code").value = code;
-    if (checked) empty.querySelector(".mutate-target").checked = true;
-    empty.querySelector(".module-name").dispatchEvent(new Event("input", { bubbles: true }));
-  } else {
-    addSourceFile(name, code, checked);
-  }
-}
 
 function stripPyExtension(filename) {
   return filename.replace(/\.py$/i, "");
 }
 
+function commitActiveEditor() {
+  const code = document.getElementById("active-editor").value;
+  if (activeId === "TEST") {
+    testFile.code = code;
+  } else {
+    const f = files.find((f) => f.id === activeId);
+    if (f) f.code = code;
+  }
+}
+
+function loadActiveEditor() {
+  const editor = document.getElementById("active-editor");
+  editor.value = activeId === "TEST" ? testFile.code : (files.find((f) => f.id === activeId)?.code || "");
+}
+
+function addFile(name = "", code = "", isTarget = false) {
+  const id = "f" + nextId++;
+  const makeTarget = isTarget || files.length === 0;
+  if (makeTarget) files.forEach((f) => (f.isTarget = false));
+  files.push({ id, name, code, isTarget: makeTarget });
+  return id;
+}
+
+function removeFile(id) {
+  const idx = files.findIndex((f) => f.id === id);
+  if (idx === -1) return;
+  const wasTarget = files[idx].isTarget;
+  files.splice(idx, 1);
+  if (wasTarget && files.length > 0) files[0].isTarget = true;
+  if (activeId === id) {
+    selectFile(files.length > 0 ? files[0].id : "TEST");
+  } else {
+    renderTabs();
+  }
+  saveToLocalStorage();
+  validatePlantButton();
+}
+
+function setTarget(id) {
+  files.forEach((f) => (f.isTarget = f.id === id));
+  renderTabs();
+  saveToLocalStorage();
+  validatePlantButton();
+}
+
+function selectFile(id) {
+  commitActiveEditor();
+  activeId = id;
+  loadActiveEditor();
+  renderTabs();
+  renderToolbar();
+}
+
+function renderTabs() {
+  const bar = document.getElementById("tab-bar");
+  bar.innerHTML = "";
+  for (const f of files) {
+    const tab = document.createElement("div");
+    tab.className = "tab" + (f.id === activeId ? " active" : "") + (f.isTarget ? " is-target" : "");
+    tab.innerHTML = `
+      <button type="button" class="tab-star" title="${f.isTarget ? "This file will be mutated" : "Mark as the file to mutate"}">${f.isTarget ? "●" : "○"}</button>
+      <span class="tab-name">${escapeHtml(f.name || "untitled")}</span>
+      <button type="button" class="tab-close" title="Remove">&times;</button>
+    `;
+    tab.addEventListener("click", (e) => {
+      if (e.target.closest(".tab-star") || e.target.closest(".tab-close")) return;
+      selectFile(f.id);
+    });
+    tab.querySelector(".tab-star").addEventListener("click", (e) => {
+      e.stopPropagation();
+      setTarget(f.id);
+    });
+    tab.querySelector(".tab-close").addEventListener("click", (e) => {
+      e.stopPropagation();
+      removeFile(f.id);
+    });
+    bar.appendChild(tab);
+  }
+
+  const addTab = document.createElement("button");
+  addTab.type = "button";
+  addTab.className = "tab add-tab";
+  addTab.textContent = "+";
+  addTab.title = "Add another source file";
+  addTab.addEventListener("click", () => {
+    const id = addFile();
+    selectFile(id);
+    saveToLocalStorage();
+    validatePlantButton();
+  });
+  bar.appendChild(addTab);
+
+  const testTab = document.createElement("div");
+  testTab.className = "tab test-tab" + (activeId === "TEST" ? " active" : "");
+  testTab.innerHTML = `<span class="tab-icon">T</span><span class="tab-name">${escapeHtml(testFile.name || "test file")}</span>`;
+  testTab.addEventListener("click", () => selectFile("TEST"));
+  bar.appendChild(testTab);
+}
+
+function renderToolbar() {
+  const nameInput = document.getElementById("active-name");
+  if (activeId === "TEST") {
+    nameInput.value = testFile.name;
+    nameInput.placeholder = "test module name, e.g. test_heap";
+  } else {
+    const f = files.find((f) => f.id === activeId);
+    nameInput.value = f ? f.name : "";
+    nameInput.placeholder = "module name, e.g. heap";
+  }
+}
+
+document.getElementById("active-name").addEventListener("input", (e) => {
+  if (activeId === "TEST") {
+    testFile.name = e.target.value;
+  } else {
+    const f = files.find((f) => f.id === activeId);
+    if (f) f.name = e.target.value;
+  }
+  renderTabs();
+  saveToLocalStorage();
+  validatePlantButton();
+});
+
+document.getElementById("active-editor").addEventListener("input", () => {
+  commitActiveEditor();
+  saveToLocalStorage();
+  validatePlantButton();
+});
+
 document.getElementById("upload-source-files").addEventListener("change", async (e) => {
-  const files = [...e.target.files];
-  let anyTargetChecked = [...document.querySelectorAll(".mutate-target")].some((r) => r.checked);
-  for (const file of files) {
+  const uploaded = [...e.target.files];
+  let lastTouched = null;
+  for (const file of uploaded) {
     const text = await file.text();
     const name = stripPyExtension(file.name);
-    const testNameField = document.getElementById("test-module-name");
-    const testCodeField = document.getElementById("test-module-code");
-    if (name.startsWith("test_") && !testNameField.value.trim() && !testCodeField.value.trim()) {
-      testNameField.value = name;
-      testCodeField.value = text;
-      testNameField.dispatchEvent(new Event("input", { bubbles: true }));
+    if (name.startsWith("test_") && !testFile.name.trim() && !testFile.code.trim()) {
+      testFile.name = name;
+      testFile.code = text;
+      lastTouched = "TEST";
       continue;
     }
-    fillOrAddSourceFile(name, text, !anyTargetChecked);
-    anyTargetChecked = true;
+    const empty = files.find((f) => !f.name.trim() && !f.code.trim());
+    if (empty) {
+      empty.name = name;
+      empty.code = text;
+      lastTouched = empty.id;
+    } else {
+      lastTouched = addFile(name, text);
+    }
   }
-  e.target.value = ""; // allow re-selecting the same file(s) again later
+  if (lastTouched) {
+    selectFile(lastTouched);
+  } else {
+    renderTabs();
+    renderToolbar();
+  }
+  saveToLocalStorage();
+  validatePlantButton();
+  e.target.value = "";
 });
 
 document.getElementById("upload-test-file").addEventListener("change", async (e) => {
   const file = e.target.files[0];
   if (!file) return;
   const text = await file.text();
-  document.getElementById("test-module-name").value = stripPyExtension(file.name);
-  document.getElementById("test-module-code").value = text;
-  document.getElementById("test-module-name").dispatchEvent(new Event("input", { bubbles: true }));
+  testFile.name = stripPyExtension(file.name);
+  testFile.code = text;
+  selectFile("TEST");
+  saveToLocalStorage();
+  validatePlantButton();
   e.target.value = "";
 });
 
-function collectSourceFiles() {
-  const entries = [...document.querySelectorAll("#source-files-list [data-entry]")];
+function getSourcesAndTarget() {
+  commitActiveEditor();
   const sources = {};
   let target = null;
-  for (const entry of entries) {
-    const name = entry.querySelector(".module-name").value.trim();
-    const code = entry.querySelector(".module-code").value;
+  for (const f of files) {
+    const name = f.name.trim();
+    const code = f.code;
     if (!name || !code.trim()) continue;
     sources[name] = code;
-    if (entry.querySelector(".mutate-target").checked) target = name;
+    if (f.isTarget) target = name;
   }
   return { sources, target };
 }
 
 function validatePlantButton() {
-  const { sources, target } = collectSourceFiles();
-  const testName = document.getElementById("test-module-name").value.trim();
-  const testCode = document.getElementById("test-module-code").value.trim();
+  const { sources, target } = getSourcesAndTarget();
+  const testName = testFile.name.trim();
+  const testCode = testFile.code.trim();
 
   const missing = [];
   if (!pyodide) missing.push("Python runtime is still loading");
   if (Object.keys(sources).length === 0) {
     missing.push("a source file with both a module name and code");
   } else if (!target) {
-    // A radio can be checked on an entry that's still missing a name/code,
-    // in which case collectSourceFiles() silently drops it from `sources`
-    // and `target` stays null -- surface that specifically, since otherwise
-    // the button just stays disabled with no visible reason.
-    const checkedButIncomplete = [...document.querySelectorAll("#source-files-list [data-entry]")].some(
-      (entry) => entry.querySelector(".mutate-target").checked
-    );
+    const anyTargetFlagged = files.some((f) => f.isTarget);
     missing.push(
-      checkedButIncomplete
-        ? 'the file marked "Mutate this one" needs both a module name and code'
-        : 'check "Mutate this one" on the file you want mutated'
+      anyTargetFlagged
+        ? "the file marked to be mutated needs both a module name and code"
+        : "mark a file to be mutated (click the circle on its tab)"
     );
   }
   if (!testName) missing.push("a test module name");
@@ -300,17 +491,8 @@ function validatePlantButton() {
 
 function saveToLocalStorage() {
   try {
-    const entries = [...document.querySelectorAll("#source-files-list [data-entry]")].map((entry) => ({
-      name: entry.querySelector(".module-name").value,
-      code: entry.querySelector(".module-code").value,
-      checked: entry.querySelector(".mutate-target").checked,
-    }));
-    const payload = {
-      entries,
-      testName: document.getElementById("test-module-name").value,
-      testCode: document.getElementById("test-module-code").value,
-    };
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+    commitActiveEditor();
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ files, testFile }));
   } catch (err) {
     // localStorage can throw in private browsing / disabled-storage contexts -- non-fatal
   }
@@ -324,19 +506,17 @@ function loadFromLocalStorage() {
   } catch (err) {
     payload = null;
   }
-  if (payload && payload.entries && payload.entries.length) {
-    for (const e of payload.entries) addSourceFile(e.name, e.code, e.checked);
-    document.getElementById("test-module-name").value = payload.testName || "";
-    document.getElementById("test-module-code").value = payload.testCode || "";
+  if (payload && Array.isArray(payload.files) && payload.files.length) {
+    files = payload.files.map((f) => ({ id: "f" + nextId++, name: f.name || "", code: f.code || "", isTarget: !!f.isTarget }));
+    if (!files.some((f) => f.isTarget)) files[0].isTarget = true;
+    testFile = { name: (payload.testFile && payload.testFile.name) || "", code: (payload.testFile && payload.testFile.code) || "" };
   } else {
-    addSourceFile("", "", true);
+    addFile("", "", true);
+    testFile = { name: "", code: "" };
   }
+  selectFile(files[0] ? files[0].id : "TEST");
   validatePlantButton();
 }
-
-document.getElementById("add-source-file").addEventListener("click", () => addSourceFile());
-document.getElementById("test-module-name").addEventListener("input", () => { saveToLocalStorage(); validatePlantButton(); });
-document.getElementById("test-module-code").addEventListener("input", () => { saveToLocalStorage(); validatePlantButton(); });
 
 function callPy(fnName, payloadObj) {
   const fn = pyodide.globals.get(fnName);
@@ -368,9 +548,9 @@ function showDiff() {
 }
 
 document.getElementById("plant-btn").addEventListener("click", () => {
-  const { sources, target } = collectSourceFiles();
-  const testName = document.getElementById("test-module-name").value.trim();
-  const testSource = document.getElementById("test-module-code").value;
+  const { sources, target } = getSourcesAndTarget();
+  const testName = testFile.name.trim();
+  const testSource = testFile.code;
 
   const result = callPy("plant_json", { target, sources, test_name: testName, test_source: testSource });
   if (!result.ok) {
@@ -394,7 +574,7 @@ document.getElementById("plant-btn").addEventListener("click", () => {
 });
 
 document.getElementById("check-btn").addEventListener("click", () => {
-  const { sources } = collectSourceFiles();
+  const { sources } = getSourcesAndTarget();
   const allModuleNames = [...Object.keys(sources), currentTestName];
   const candidateSource = document.getElementById("mutated-editor").value;
 

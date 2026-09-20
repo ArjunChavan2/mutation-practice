@@ -1,0 +1,19 @@
+{
+  "profiles": [
+    {
+      "id": "eecs367-astar",
+      "label": "A* Path-Planning (EECS 367 Project 1)",
+      "sources": [
+        {"module": "heap", "path": "src/heap.py"},
+        {"module": "map_store", "path": "src/map_store.py"},
+        {"module": "astar", "path": "src/astar.py"}
+      ],
+      "tests": {
+        "heap": {"module": "test_heap", "path": "tests/test_heap.py"},
+        "map_store": {"module": "test_map_store", "path": "tests/test_map_store.py"},
+        "astar": {"module": "test_astar", "path": "tests/test_astar.py"}
+      },
+      "default_target": "astar"
+    }
+  ]
+}

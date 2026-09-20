@@ -193,4 +193,37 @@ def constant_tweak(source: str, tree: ast.AST) -> list[Candidate]:
     return candidates
 
 
-ALL_OPERATORS = [comparison_swap, boolean_swap, boolean_negate, arithmetic_swap, constant_tweak]
+# -- boundary offset (off-by-one on a non-constant comparison operand) ------
+
+def boundary_offset(source: str, tree: ast.AST) -> list[Candidate]:
+    """Off-by-one offset on a comparison operand that isn't a bare literal.
+
+    Targets a shape `constant_tweak` can't reach: a boundary check like
+    `cell_x < self.width` has no literal Constant node to tweak and no
+    existing arithmetic BinOp to swap -- the mutation has to *introduce* a
+    `- 1`/`+ 1` around the whole operand. Skips bare Constant operands
+    (`constant_tweak` already covers those) to avoid a redundant, weaker
+    duplicate of that operator's job.
+    """
+    lines = source.splitlines()
+    candidates: list[Candidate] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Compare):
+            continue
+        for operand in (node.left, *node.comparators):
+            if isinstance(operand, ast.Constant):
+                continue
+            span_text = _node_text(lines, operand)
+            for symbol in ("-", "+"):
+                candidates.append(Candidate(
+                    operand.lineno, operand.col_offset, operand.end_lineno, operand.end_col_offset,
+                    f"({span_text} {symbol} 1)", "boundary_offset",
+                    f"Changed `{span_text}` to `({span_text} {symbol} 1)` on line {operand.lineno} "
+                    f"(off-by-one on a comparison boundary).",
+                ))
+    return candidates
+
+
+ALL_OPERATORS = [
+    comparison_swap, boolean_swap, boolean_negate, arithmetic_swap, constant_tweak, boundary_offset,
+]

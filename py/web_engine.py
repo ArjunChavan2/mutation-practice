@@ -25,27 +25,86 @@ import json
 import os
 import random
 import sys
+import tokenize
 import unittest
 
-from operators import ALL_OPERATORS, Candidate
+from operators import ALL_OPERATORS as GENERIC_OPERATORS, Candidate
+from project_operators import ALL_PROJECT_OPERATORS
 
 SRC_DIR = "/practice/src"
 TEST_DIR = "/practice/tests"
 MAX_ATTEMPTS = 25
+OPERATOR_SETS = ("generic", "project", "all")
+
+
+def _select_operators(operator_set: str) -> list:
+    if operator_set == "generic":
+        return GENERIC_OPERATORS
+    if operator_set == "project":
+        return ALL_PROJECT_OPERATORS
+    return [*GENERIC_OPERATORS, *ALL_PROJECT_OPERATORS]
 
 
 def _apply(source: str, candidate: Candidate) -> str:
+    return _replace_span(
+        source, candidate.lineno, candidate.col_offset, candidate.end_lineno, candidate.end_col_offset,
+        candidate.replacement,
+    )
+
+
+def _replace_span(source: str, lineno: int, col: int, end_lineno: int, end_col: int, replacement: str) -> str:
     lines = source.splitlines(keepends=True)
-    if candidate.lineno == candidate.end_lineno:
-        line = lines[candidate.lineno - 1]
-        lines[candidate.lineno - 1] = (
-            line[:candidate.col_offset] + candidate.replacement + line[candidate.end_col_offset:]
-        )
+    if lineno == end_lineno:
+        line = lines[lineno - 1]
+        lines[lineno - 1] = line[:col] + replacement + line[end_col:]
         return "".join(lines)
-    before = lines[candidate.lineno - 1][:candidate.col_offset]
-    after = lines[candidate.end_lineno - 1][candidate.end_col_offset:]
-    new_block = before + candidate.replacement + after
-    return "".join(lines[:candidate.lineno - 1]) + new_block + "".join(lines[candidate.end_lineno:])
+    before = lines[lineno - 1][:col]
+    after = lines[end_lineno - 1][end_col:]
+    return "".join(lines[:lineno - 1]) + before + replacement + after + "".join(lines[end_lineno:])
+
+
+def _strip_docstrings(source: str, tree: ast.Module) -> str:
+    """Blank out every module/class/function docstring, preserving all other formatting.
+
+    A docstring is the first statement of a Module/ClassDef/FunctionDef body
+    when it's a bare string-constant expression. Replaced with nothing, except
+    when it's the body's *only* statement, where a `pass` keeps the syntax
+    valid (crucially: replacing a *module* docstring must never insert
+    anything, even `pass` -- a `from __future__ import ...` immediately after
+    it must remain the literal first statement, which `pass` would violate).
+    """
+    doc_pairs = []
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+            body = node.body
+            if body and isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant) \
+                    and isinstance(body[0].value.value, str):
+                doc_pairs.append((node, body[0]))
+    doc_pairs.sort(key=lambda pair: (pair[1].lineno, pair[1].col_offset), reverse=True)
+    for node, doc_expr in doc_pairs:
+        needs_placeholder = not isinstance(node, ast.Module) and len(node.body) == 1
+        replacement = (" " * doc_expr.col_offset + "pass") if needs_placeholder else ""
+        source = _replace_span(source, doc_expr.lineno, doc_expr.col_offset, doc_expr.end_lineno, doc_expr.end_col_offset, replacement)
+    return source
+
+
+def _strip_comments(source: str) -> str:
+    out_tokens = []
+    for tok in tokenize.generate_tokens(io.StringIO(source).readline):
+        if tok.type == tokenize.COMMENT:
+            continue
+        out_tokens.append(tok)
+    return tokenize.untokenize(out_tokens)
+
+
+def _clean_source(source: str) -> str:
+    """Strip comments and docstrings so the hunt is pure code, no hint text."""
+    tree = ast.parse(source)
+    cleaned = _strip_comments(_strip_docstrings(source, tree))
+    # cosmetic: the now-empty lines left behind by removed docstrings still
+    # carry their original indentation as trailing whitespace -- tidy those
+    # (and only those) down to genuinely blank lines.
+    return "".join(line if line.strip() else "\n" for line in cleaned.splitlines(keepends=True))
 
 
 def _write(path: str, text: str) -> None:
@@ -53,103 +112,262 @@ def _write(path: str, text: str) -> None:
         f.write(text)
 
 
-def _evict(module_names: list[str]) -> None:
-    for name in module_names:
+# Every module name ever written to SRC_DIR/TEST_DIR this session, so a name
+# that drops out of the *current* source set (a removed/renamed tab) still
+# gets evicted from sys.modules -- otherwise Python's import cache happily
+# keeps serving the stale module object from an earlier plant, even after
+# its .py file is gone from the virtual filesystem, silently masking a
+# missing dependency instead of raising ModuleNotFoundError for it.
+_known_modules: set[str] = set()
+
+
+def _evict_known_modules() -> None:
+    for name in _known_modules:
         sys.modules.pop(name, None)
 
 
-def _setup_modules(sources: dict[str, str], test_name: str, test_source: str) -> None:
+def _clear_py_files(path: str) -> None:
+    """Remove any stale .py files left behind by a previous plant_json call
+
+    (e.g. a dependency the user has since removed or renamed a tab for) so
+    the virtual filesystem always reflects exactly the current file set,
+    never a leftover module a test could still (wrongly) import.
+    """
+    if not os.path.isdir(path):
+        return
+    for name in os.listdir(path):
+        if name.endswith(".py"):
+            os.remove(os.path.join(path, name))
+
+
+def _setup_modules(sources: dict[str, str], tests: dict[str, str]) -> None:
     os.makedirs(SRC_DIR, exist_ok=True)
     os.makedirs(TEST_DIR, exist_ok=True)
+    _clear_py_files(SRC_DIR)
+    _clear_py_files(TEST_DIR)
     for name, code in sources.items():
         _write(f"{SRC_DIR}/{name}.py", code)
-    _write(f"{TEST_DIR}/{test_name}.py", test_source)
+        _known_modules.add(name)
+    for name, code in tests.items():
+        _write(f"{TEST_DIR}/{name}.py", code)
+        _known_modules.add(name)
     if SRC_DIR not in sys.path:
         sys.path.insert(0, SRC_DIR)
     if TEST_DIR not in sys.path:
         sys.path.insert(0, TEST_DIR)
 
 
-def _run_tests(test_name: str, all_module_names: list[str]) -> bool:
-    """True if tests pass, False if they fail (or fail to even import/collect)."""
-    _evict(all_module_names)
+def _collect_suite(test_names: list[str]):
+    """Try to load and combine every named test module into one suite.
+
+    Returns (suite, None) or (None, error_str) -- a single test module that
+    fails to import fails the whole combined collection, same as `unittest
+    discover` would report a collection error for the whole run.
+    """
     loader = unittest.TestLoader()
-    try:
-        suite = loader.loadTestsFromName(test_name)
-    except Exception:
+    suite = unittest.TestSuite()
+    for name in test_names:
+        try:
+            suite.addTests(loader.loadTestsFromName(name))
+        except Exception as exc:
+            return None, f"{name}: {exc}"
+    return suite, None
+
+
+def _run_tests(test_names: list[str]) -> bool:
+    """True if every test file's tests pass, False otherwise (or on a collection failure).
+
+    Output is always discarded here -- used only during plant_json's silent
+    mutation search (trying candidates until one changes behavior), never
+    shown to the user, so it can't leak which candidate was accepted.
+    """
+    _evict_known_modules()
+    suite, _err = _collect_suite(test_names)
+    if suite is None:
         return False
     runner = unittest.TextTestRunner(stream=io.StringIO(), verbosity=0)
     result = runner.run(suite)
     return result.wasSuccessful()
 
 
+def _run_tests_with_output(test_names: list[str]) -> tuple[bool, str]:
+    """Like _run_tests, but captures and returns the real unittest output.
+
+    Used by check_fix_json (the Hunt-mode "Run Tests" button) -- unlike the
+    silent verification during planting, this is a result the user
+    deliberately asked to see, the same way running your own test suite
+    locally would show you exactly which test failed and why.
+    """
+    _evict_known_modules()
+    suite, err = _collect_suite(test_names)
+    if suite is None:
+        return False, f"Could not load tests: {err}"
+    stream = io.StringIO()
+    runner = unittest.TextTestRunner(stream=stream, verbosity=2)
+    result = runner.run(suite)
+    return result.wasSuccessful(), stream.getvalue()
+
+
+def _last_line(text: str) -> str:
+    lines = [line for line in text.strip().splitlines() if line.strip()]
+    return lines[-1] if lines else text.strip()
+
+
+def _run_tests_detailed(test_names: list[str]) -> tuple[bool, str | None]:
+    """Like _run_tests, but on failure also returns *why*, when available.
+
+    Only used for the pre-mutation sanity check in plant_json -- surfacing
+    e.g. a missing-dependency ImportError there isn't a spoiler (nothing has
+    been mutated yet), and it turns a confusing generic failure into an
+    actionable one ("ModuleNotFoundError: No module named 'heap'" -- prompting
+    "did you add it as another source file tab?").
+
+    Note loadTestsFromName doesn't raise on an import error inside the module
+    under test -- it wraps it into a synthetic failing test instead, so the
+    detail has to come from the *result's* errors/failures, not a try/except
+    around collection.
+    """
+    _evict_known_modules()
+    suite, err = _collect_suite(test_names)
+    if suite is None:
+        return False, err
+    stream = io.StringIO()
+    runner = unittest.TextTestRunner(stream=stream, verbosity=0)
+    result = runner.run(suite)
+    if result.wasSuccessful():
+        return True, None
+    if result.errors:
+        return False, _last_line(result.errors[0][1])
+    if result.failures:
+        return False, _last_line(result.failures[0][1])
+    return False, None
+
+
 def plant_json(payload_json: str) -> str:
-    """payload: {target, sources: {name: code}, test_name, test_source}."""
+    """payload: {candidates: [name, ...], sources: {name: code}, tests: {name: code}, operator_set}.
+
+    operator_set is one of "generic" | "project" | "all" (default "all" if
+    omitted or not one of those three). ``tests`` may hold more than one test
+    file -- they're all combined into a single suite for verification, the
+    same way `unittest discover` runs a whole tests/ directory at once.
+    ``candidates`` names which of ``sources`` are eligible to be mutated
+    (others are loaded as plain, always-correct dependencies); the engine
+    draws from *all* of their mutation sites as one combined pool and picks
+    whichever one lands first, so which file actually ends up mutated is not
+    decided by the caller -- only the eligible set is.
+    """
     payload = json.loads(payload_json)
-    target = payload["target"]
-    sources: dict[str, str] = payload["sources"]
-    test_name = payload["test_name"]
-    test_source = payload["test_source"]
-    all_names = [*sources.keys(), test_name]
+    candidate_names: list[str] = payload["candidates"]
+    raw_sources: dict[str, str] = payload["sources"]
+    raw_tests: dict[str, str] = payload["tests"]
+    operator_set = payload.get("operator_set", "all")
+    if operator_set not in OPERATOR_SETS:
+        operator_set = "all"
 
-    _setup_modules(sources, test_name, test_source)
+    # Comments/docstrings are stripped from every source file (not just the
+    # target) and every test file before anything else happens, so the hunt
+    # is pure code with no hint text -- and so the diff shown on reveal is
+    # clean too, rather than comparing a commented original against an
+    # uncommented mutation.
+    sources: dict[str, str] = {}
+    for name, code in raw_sources.items():
+        try:
+            sources[name] = _clean_source(code)
+        except SyntaxError as exc:
+            return json.dumps({"ok": False, "error": f"Could not parse {name}.py: {exc}"})
 
-    if not _run_tests(test_name, all_names):
+    tests: dict[str, str] = {}
+    for name, code in raw_tests.items():
+        try:
+            tests[name] = _clean_source(code)
+        except SyntaxError as exc:
+            return json.dumps({"ok": False, "error": f"Could not parse {name}.py: {exc}"})
+
+    test_names = list(tests.keys())
+    _setup_modules(sources, tests)
+
+    passed, detail = _run_tests_detailed(test_names)
+    if not passed:
+        msg = (
+            "Your pasted code doesn't pass its own test file yet -- fix that first, "
+            "then come back to practice finding a planted mutation."
+        )
+        if detail:
+            msg += f" Detail: {detail}"
+        return json.dumps({"ok": False, "error": msg})
+
+    operators = _select_operators(operator_set)
+
+    # One combined pool across every eligible file -- each entry remembers
+    # which file it came from, so the search below can try candidates from
+    # different files in the same random shuffle, rather than exhausting one
+    # file before ever considering another.
+    pool: list[tuple[str, Candidate]] = []
+    for name in candidate_names:
+        source = sources.get(name)
+        if source is None:
+            return json.dumps({"ok": False, "error": f"{name}.py was marked as a mutation candidate but has no content."})
+        try:
+            tree = ast.parse(source, filename=f"{name}.py")
+        except SyntaxError as exc:
+            return json.dumps({"ok": False, "error": f"Could not parse {name}.py: {exc}"})
+        for operator_fn in operators:
+            for candidate in operator_fn(source, tree):
+                pool.append((name, candidate))
+
+    if not pool:
         return json.dumps({
             "ok": False,
-            "error": (
-                "Your pasted code doesn't pass its own test file yet -- fix that first, "
-                "then come back to practice finding a planted mutation."
-            ),
+            "error": f"No mutation candidates found across {', '.join(candidate_names)} with the '{operator_set}' operator set.",
         })
+    random.shuffle(pool)
 
-    original_source = sources[target]
-    try:
-        tree = ast.parse(original_source, filename=f"{target}.py")
-    except SyntaxError as exc:
-        return json.dumps({"ok": False, "error": f"Could not parse {target}.py: {exc}"})
-
-    candidates: list[Candidate] = []
-    for operator_fn in ALL_OPERATORS:
-        candidates.extend(operator_fn(original_source, tree))
-    if not candidates:
-        return json.dumps({"ok": False, "error": f"No mutation candidates found in {target}.py."})
-    random.shuffle(candidates)
-
-    target_path = f"{SRC_DIR}/{target}.py"
     tried = 0
-    for candidate in candidates[:MAX_ATTEMPTS]:
+    for file_name, candidate in pool[:MAX_ATTEMPTS]:
         tried += 1
+        original_source = sources[file_name]
         mutated = _apply(original_source, candidate)
-        _write(target_path, mutated)
-        if not _run_tests(test_name, all_names):
+        path = f"{SRC_DIR}/{file_name}.py"
+        _write(path, mutated)
+        if not _run_tests(test_names):
             return json.dumps({
                 "ok": True,
+                "target": file_name,  # which file the mutation actually landed in
+                "original_source": original_source,
                 "mutated_source": mutated,
                 "operator": candidate.operator,
                 "description": candidate.description,
                 "tried": tried,
+                # every file's *cleaned* content, mutated file included -- lets
+                # the UI show a hunt view listing every candidate file (not
+                # just the one that got mutated) with comments/docstrings
+                # already stripped from all of them.
+                "cleaned_sources": {**sources, file_name: mutated},
             })
-        _write(target_path, original_source)
+        _write(path, original_source)  # inert -- restore before trying the next candidate
 
-    _write(target_path, original_source)
     return json.dumps({
         "ok": False,
-        "error": f"Tried {tried} mutation(s) in {target}.py; none changed test-suite behavior.",
+        "error": f"Tried {tried} mutation(s) across {', '.join(candidate_names)}; none changed test-suite behavior.",
     })
 
 
 def check_fix_json(payload_json: str) -> str:
-    """payload: {target, candidate_source, all_module_names, test_name}."""
-    payload = json.loads(payload_json)
-    target = payload["target"]
-    candidate_source = payload["candidate_source"]
-    all_module_names: list[str] = payload["all_module_names"]
-    test_name = payload["test_name"]
+    """payload: {sources: {name: code}, test_names: [name, ...]}.
 
-    _write(f"{SRC_DIR}/{target}.py", candidate_source)
-    passed = _run_tests(test_name, all_module_names)
-    return json.dumps({"passed": passed})
+    Writes every file in ``sources`` as given (Hunt mode shows every
+    candidate file, not just the one that was actually mutated, so the user
+    may have edited any of them), reruns the full combined test suite
+    against that, and returns the real unittest output for display.
+    """
+    payload = json.loads(payload_json)
+    sources: dict[str, str] = payload["sources"]
+    test_names: list[str] = payload["test_names"]
+
+    for name, code in sources.items():
+        _write(f"{SRC_DIR}/{name}.py", code)
+    passed, output = _run_tests_with_output(test_names)
+    return json.dumps({"passed": passed, "output": output})
 
 
 def diff_json(payload_json: str) -> str:

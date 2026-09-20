@@ -37,12 +37,29 @@
     border: 1px solid var(--border);
     border-radius: 8px;
     padding: 14px;
-    margin-bottom: 16px;
   }
   .panel h2 { font-size: 12px; margin: 0 0 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
 
+  /* -- app layout: left-side mode nav + main content -------------------- */
+  .app-layout { display: flex; gap: 16px; align-items: flex-start; }
+  .sidebar { display: flex; flex-direction: column; gap: 4px; width: 120px; flex-shrink: 0; }
+  .nav-item {
+    background: var(--panel);
+    color: var(--muted);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px 12px;
+    font-size: 13px;
+    text-align: left;
+    cursor: pointer;
+  }
+  .nav-item:hover:not(:disabled) { background: #2a2a2a; color: var(--text); }
+  .nav-item.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .nav-item:disabled { opacity: .4; cursor: not-allowed; }
+  .main-content { flex: 1; min-width: 0; }
+
   /* -- tab bar (code-editor style) ------------------------------------- */
-  #tab-bar {
+  .tab-bar {
     display: flex;
     align-items: stretch;
     gap: 2px;
@@ -105,9 +122,17 @@
     display: inline-flex; align-items: center; justify-content: center;
     width: 15px; height: 15px; border-radius: 3px;
     background: var(--test-color); color: #10221d; font-size: 10px; font-weight: 700;
+    flex-shrink: 0;
+  }
+  .tab-divider {
+    width: 1px;
+    background: var(--border);
+    margin: 4px 4px 0;
+    align-self: stretch;
+    flex-shrink: 0;
   }
 
-  #editor-toolbar {
+  .editor-toolbar {
     display: flex;
     align-items: center;
     gap: 10px;
@@ -117,8 +142,8 @@
     padding: 8px 10px;
     flex-wrap: wrap;
   }
-  #editor-toolbar label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
-  #active-name {
+  .editor-toolbar label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .name-input {
     font-family: var(--mono);
     font-size: 13px;
     padding: 5px 8px;
@@ -128,25 +153,57 @@
     color: var(--text);
     width: 220px;
   }
-  #active-name:focus { outline: 1px solid var(--accent); }
+  .name-input:focus { outline: 1px solid var(--accent); }
+  .name-input:disabled { opacity: .7; }
 
-  textarea {
-    width: 100%;
-    min-height: 320px;
-    font-family: var(--mono);
-    font-size: 13px;
-    line-height: 1.5;
-    padding: 12px;
+  /* The gutter is an absolutely-positioned overlay, not a flex sibling --
+     its height must track the textarea's own (resizable) height, never the
+     other way around. A flex/stretch layout here would let the gutter's own
+     content (one line of text per source line) dictate the shared height,
+     making the whole editor grow unbounded to fit the file instead of
+     staying a fixed, scrollable box. */
+  .editor-wrap {
+    position: relative;
     border: 1px solid var(--border);
     border-top: none;
     border-radius: 0 0 6px 6px;
+    overflow: hidden;
+  }
+  .line-numbers {
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 2.8em;
+    padding: 12px 8px 12px 10px;
+    font-family: var(--mono);
+    font-size: 13px;
+    line-height: 1.5;
+    text-align: right;
+    color: #5a5a5a;
+    background: var(--panel-alt);
+    border-right: 1px solid var(--border);
+    white-space: pre;
+    overflow: hidden;
+    user-select: none;
+    pointer-events: none;
+  }
+  textarea {
+    display: block;
+    width: 100%;
+    height: 320px;
+    font-family: var(--mono);
+    font-size: 13px;
+    line-height: 1.5;
+    padding: 12px 12px 12px calc(2.8em + 18px);
+    border: none;
+    border-radius: 0;
     resize: vertical;
     tab-size: 4;
     background: var(--editor-bg);
     color: var(--text);
   }
   textarea:focus { outline: none; }
-  #mutated-editor { min-height: 300px; border-radius: 6px; border-top: 1px solid var(--border); }
 
   button {
     background: var(--accent);
@@ -170,7 +227,7 @@
   #result-line { font-size: 14px; font-weight: 600; margin: 10px 0; }
   #result-line.ok { color: var(--ok); }
   #result-line.bad { color: var(--bad); }
-  #diff-output {
+  #test-output, #diff-output {
     background: #161616;
     color: #d4d4d4;
     font-family: var(--mono);
@@ -183,6 +240,8 @@
     max-height: 360px;
     overflow-y: auto;
   }
+  #test-output.ok { border-color: var(--ok); }
+  #test-output.bad { border-color: var(--bad); }
   [hidden] { display: none !important; }
   .upload-btn {
     display: inline-flex; align-items: center; gap: 6px;
@@ -191,13 +250,18 @@
     white-space: nowrap;
   }
   .upload-btn:hover { background: #454545; }
+
+  @media (max-width: 700px) {
+    .app-layout { flex-direction: column; }
+    .sidebar { flex-direction: row; width: auto; }
+  }
 </style>
 </head>
 <body>
 
 <h1>Mutation Practice</h1>
 <div class="subtitle">
-  Paste or upload your own already-correct source file(s) and its test file, plant one verified
+  Paste or upload your own already-correct source file(s) and test file(s), plant one verified
   mutation, and hunt it down yourself &mdash; no hints, no diff, nothing revealed until you've
   either fixed it or tried three times. This runs entirely in your browser (Python via Pyodide);
   nothing you paste or upload is ever sent anywhere or committed to this site's repo.
@@ -205,63 +269,138 @@
 
 <div id="status-line">Loading Python runtime&hellip;</div>
 
-<div class="panel" id="setup-panel">
-  <h2>Your code</h2>
-  <div class="row" style="margin-bottom: 8px;">
-    <label class="upload-btn">
-      Upload source file(s)
-      <input type="file" id="upload-source-files" accept=".py" multiple style="display:none;">
-    </label>
-    <label class="upload-btn">
-      Upload test file
-      <input type="file" id="upload-test-file" accept=".py" style="display:none;">
-    </label>
-  </div>
+<div class="app-layout">
+  <nav class="sidebar">
+    <button type="button" id="nav-upload" class="nav-item active">Upload</button>
+    <button type="button" id="nav-hunt" class="nav-item" disabled>Hunt</button>
+  </nav>
 
-  <div id="tab-bar"></div>
-  <div id="editor-toolbar">
-    <label for="active-name">Module name</label>
-    <input type="text" id="active-name" placeholder="e.g. heap">
-  </div>
-  <textarea id="active-editor" spellcheck="false" placeholder="Paste this file's Python source here."></textarea>
+  <div class="main-content">
 
-  <button id="plant-btn" disabled style="margin-top:12px;">Plant Mutation</button>
-  <div class="hint" id="plant-readiness"></div>
-  <div class="hint">Click the &#9675; on a tab to mark it the one to mutate. Saved to your browser's local storage only.</div>
-</div>
+    <div id="upload-mode">
+      <div class="panel" id="setup-panel">
+        <h2>Your code</h2>
+        <div class="row" style="margin-bottom: 8px;">
+          <label for="project-profile" style="font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.04em;">Project</label>
+          <select id="project-profile">
+            <option value="">Manual (paste/upload)</option>
+          </select>
+          <button id="connect-folder-btn" class="secondary" type="button" disabled>Connect folder&hellip;</button>
+        </div>
+        <div class="hint" id="connect-folder-hint" style="margin-bottom:8px;"></div>
 
-<div class="panel" id="mutated-panel" hidden>
-  <h2>Hunt for the bug</h2>
-  <div class="hint" id="target-label"></div>
-  <textarea id="mutated-editor" spellcheck="false"></textarea>
-  <div style="margin-top:10px;">
-    <button id="check-btn">Check My Fix</button>
-    <button id="reveal-btn" class="danger" hidden>Reveal</button>
-    <button id="new-mutation-btn" class="secondary">New Mutation</button>
+        <div class="row" style="margin-bottom: 8px;">
+          <label class="upload-btn">
+            Upload source file(s)
+            <input type="file" id="upload-source-files" accept=".py" multiple style="display:none;">
+          </label>
+          <label class="upload-btn">
+            Upload test file(s)
+            <input type="file" id="upload-test-files" accept=".py" multiple style="display:none;">
+          </label>
+        </div>
+
+        <div id="tab-bar" class="tab-bar"></div>
+        <div id="editor-toolbar" class="editor-toolbar">
+          <label for="active-name">Module name</label>
+          <input type="text" id="active-name" class="name-input" placeholder="e.g. heap">
+        </div>
+        <div class="editor-wrap">
+          <div class="line-numbers" id="active-line-numbers">1</div>
+          <textarea id="active-editor" spellcheck="false" placeholder="Paste this file's Python source here."></textarea>
+        </div>
+
+        <div class="row" style="margin-top:12px;">
+          <label style="display:inline-flex; align-items:center; gap:6px; font-size:13px; font-weight:normal;">
+            <input type="checkbox" id="use-generic-operators" checked> Generic operators
+          </label>
+          <label style="display:inline-flex; align-items:center; gap:6px; font-size:13px; font-weight:normal;">
+            <input type="checkbox" id="use-project-operators" checked> Project-specific operators
+          </label>
+        </div>
+        <div class="hint" style="margin-bottom:6px;">
+          Generic: comparison/boolean/arithmetic/constant/boundary patterns, useful for any project.
+          Project-specific: patterns added for this project only, in <code>py/project_operators.py</code>.
+        </div>
+
+        <button id="plant-btn" disabled>Plant Mutation</button>
+        <div class="hint" id="plant-readiness"></div>
+        <div class="hint">
+          Click the &#9675; on any source tab(s) to include them in the mutation pool &mdash; the
+          engine picks randomly among every eligible file's mutation sites, so which one actually
+          ends up mutated isn't fixed to a single file. Add as many test files (green
+          <strong>T</strong> tabs) as your project has &mdash; they're all run together. Saved to
+          your browser's local storage only.
+        </div>
+      </div>
+    </div>
+
+    <div id="hunt-mode" hidden>
+      <div class="panel" id="hunt-panel">
+        <h2>Hunt for the bug</h2>
+        <div class="hint" id="hunt-info"></div>
+        <div id="hunt-tab-bar" class="tab-bar"></div>
+        <div class="editor-toolbar">
+          <label for="hunt-active-name">Module name</label>
+          <input type="text" id="hunt-active-name" class="name-input" disabled>
+        </div>
+        <div class="editor-wrap">
+          <div class="line-numbers" id="hunt-line-numbers">1</div>
+          <textarea id="hunt-active-editor" spellcheck="false"></textarea>
+        </div>
+        <div style="margin-top:10px;">
+          <button id="run-tests-btn">Run Tests</button>
+          <button id="reveal-btn" class="danger" hidden>Reveal</button>
+          <button id="new-mutation-btn" class="secondary">New Mutation</button>
+        </div>
+        <div id="result-line"></div>
+        <pre id="test-output" hidden></pre>
+        <pre id="diff-output" hidden></pre>
+      </div>
+    </div>
+
   </div>
-  <div id="result-line"></div>
-  <pre id="diff-output" hidden></pre>
 </div>
 
 <script src="https://cdn.jsdelivr.net/pyodide/v0.28.0/full/pyodide.js"></script>
 <script>
 let pyodide = null;
-let plantedOriginal = null;   // the pristine source of the target module at plant time
+let plantedOriginal = null;   // the pristine (cleaned) source of the target module at plant time
 let plantedMutated = null;    // the mutated source the engine actually planted
 let currentTarget = null;
-let currentTestName = null;
+let currentTestNames = [];    // every test module name planted with, run together
 let attempts = 0;
 
-const STORAGE_KEY = "mutation-practice-v2";
+const STORAGE_KEY = "mutation-practice-v4";
 
-// -- data model: files is an array of source-file tabs; testFile is the one
-// fixed, non-removable tab. activeId is either a file's id or the string
-// "TEST". The shared #active-editor textarea always reflects whichever is
-// active; switching tabs loads/saves its content into this model. ---------
+// -- Upload-mode data model: files and testFiles are both arrays of tabs
+// (same shape: {id, name, code}; files additionally carry isCandidate --
+// any number of source files can be eligible for mutation at once; the
+// engine picks randomly among all of them, not a single fixed "target").
+// activeId names whichever tab (source or test) is currently shown in the
+// shared #active-editor textarea; switching tabs loads/saves its content
+// into this model. -----------------------------------------------------
 let files = [];
-let testFile = { name: "", code: "" };
+let testFiles = [];
 let activeId = null;
 let nextId = 1;
+
+// -- Hunt-mode data model: a snapshot of every candidate source file taken
+// at plant time (all cleaned, target's content already the mutated
+// version). No add/remove/target-marking here -- it's a fixed set to hunt
+// through, not an editable project setup. Test files aren't shown here --
+// mutations never land in them. ----------------------------------------
+let huntFiles = [];
+let huntActiveId = null;
+let huntPlanted = false;
+
+// -- project folder connection: optional. profiles describe a known
+// project's expected file layout (filenames + module names), never any
+// actual code. connectedDirHandle is a File System Access API handle to
+// whatever local folder the user picked; nothing about it or its contents
+// is ever sent anywhere. --------------------------------------------------
+let profiles = [];
+let connectedDirHandle = null;
 
 function setStatus(text) {
   document.getElementById("status-line").textContent = text;
@@ -277,37 +416,174 @@ function stripPyExtension(filename) {
   return filename.replace(/\.py$/i, "");
 }
 
-function commitActiveEditor() {
-  const code = document.getElementById("active-editor").value;
-  if (activeId === "TEST") {
-    testFile.code = code;
-  } else {
-    const f = files.find((f) => f.id === activeId);
-    if (f) f.code = code;
+// -- mode switching ----------------------------------------------------------
+
+function switchMode(mode) {
+  if (mode === "hunt" && !huntPlanted) return;
+  document.getElementById("upload-mode").hidden = mode !== "upload";
+  document.getElementById("hunt-mode").hidden = mode !== "hunt";
+  document.getElementById("nav-upload").classList.toggle("active", mode === "upload");
+  document.getElementById("nav-hunt").classList.toggle("active", mode === "hunt");
+}
+
+document.getElementById("nav-upload").addEventListener("click", () => switchMode("upload"));
+document.getElementById("nav-hunt").addEventListener("click", () => switchMode("hunt"));
+
+// -- project folder connection -----------------------------------------------
+
+async function readFileFromDir(dirHandle, relativePath) {
+  const parts = relativePath.split("/");
+  let dir = dirHandle;
+  for (let i = 0; i < parts.length - 1; i++) {
+    dir = await dir.getDirectoryHandle(parts[i]);
   }
+  const fileHandle = await dir.getFileHandle(parts[parts.length - 1]);
+  const file = await fileHandle.getFile();
+  return await file.text();
+}
+
+async function loadProfiles() {
+  try {
+    const data = await fetch("profiles.json", { cache: "no-store" }).then((r) => r.json());
+    profiles = data.profiles || [];
+  } catch (err) {
+    profiles = [];
+  }
+  const select = document.getElementById("project-profile");
+  for (const profile of profiles) {
+    const option = document.createElement("option");
+    option.value = profile.id;
+    option.textContent = profile.label;
+    select.appendChild(option);
+  }
+  updateConnectFolderAvailability();
+}
+
+function updateConnectFolderAvailability() {
+  const select = document.getElementById("project-profile");
+  const btn = document.getElementById("connect-folder-btn");
+  const hint = document.getElementById("connect-folder-hint");
+  const hasPicker = typeof window.showDirectoryPicker === "function";
+  if (!hasPicker) {
+    btn.disabled = true;
+    hint.textContent = select.value
+      ? "Folder connect needs Chrome or Edge -- use upload/paste for this project's files instead."
+      : "";
+    return;
+  }
+  btn.disabled = !select.value;
+  hint.textContent = select.value
+    ? "Pick your project's root folder (the one containing src/ and tests/)."
+    : "";
+}
+
+document.getElementById("project-profile").addEventListener("change", updateConnectFolderAvailability);
+
+document.getElementById("connect-folder-btn").addEventListener("click", async () => {
+  const profileId = document.getElementById("project-profile").value;
+  const profile = profiles.find((p) => p.id === profileId);
+  if (!profile) return;
+
+  let dirHandle;
+  try {
+    dirHandle = await window.showDirectoryPicker();
+  } catch (err) {
+    return; // user cancelled the picker -- not an error
+  }
+
+  setStatus(`Reading ${profile.label} from the connected folder...`);
+  try {
+    const newFiles = [];
+    for (const src of profile.sources) {
+      const code = await readFileFromDir(dirHandle, src.path);
+      // Every connected source file starts as a mutation candidate -- a real
+      // project's mutator isn't confined to one file, so neither is this.
+      newFiles.push({ name: src.module, code, isCandidate: true });
+    }
+
+    // Load every test file the profile declares, not just the default
+    // target's -- a real project's whole test suite, all at once.
+    const newTests = [];
+    const seenTestModules = new Set();
+    for (const testEntry of Object.values(profile.tests)) {
+      if (seenTestModules.has(testEntry.module)) continue;
+      seenTestModules.add(testEntry.module);
+      const code = await readFileFromDir(dirHandle, testEntry.path);
+      newTests.push({ name: testEntry.module, code });
+    }
+
+    files = newFiles.map((f) => ({ id: "f" + nextId++, ...f }));
+    testFiles = newTests.map((t) => ({ id: "t" + nextId++, ...t }));
+    connectedDirHandle = dirHandle;
+
+    activeId = files[0].id;
+    loadActiveEditor();
+    renderTabs();
+    renderToolbar();
+    saveToLocalStorage();
+    validatePlantButton();
+    setStatus("Ready.");
+  } catch (err) {
+    setStatus(`Could not read expected files from that folder: ${err}. Is it the project's root (containing src/ and tests/)?`);
+  }
+});
+
+// -- Upload mode: source + test file tabs, sharing one editor ---------------
+
+function findActiveEntry() {
+  return files.find((f) => f.id === activeId) || testFiles.find((f) => f.id === activeId) || null;
+}
+
+function isActiveTest() {
+  return testFiles.some((f) => f.id === activeId);
+}
+
+// -- line-number gutters: a plain <textarea> has no built-in line numbers,
+// so this keeps a sibling div's text and vertical scroll position in sync
+// with it by hand. Shared by both the Upload-mode and Hunt-mode editors. ---
+function renderLineNumbers(editorId, gutterId) {
+  const editor = document.getElementById(editorId);
+  const gutter = document.getElementById(gutterId);
+  const lineCount = editor.value.split("\n").length;
+  let text = "";
+  for (let i = 1; i <= lineCount; i++) text += i + "\n";
+  gutter.textContent = text.slice(0, -1); // drop the final trailing newline
+  gutter.scrollTop = editor.scrollTop;
+}
+
+function commitActiveEditor() {
+  const entry = findActiveEntry();
+  if (entry) entry.code = document.getElementById("active-editor").value;
 }
 
 function loadActiveEditor() {
-  const editor = document.getElementById("active-editor");
-  editor.value = activeId === "TEST" ? testFile.code : (files.find((f) => f.id === activeId)?.code || "");
+  const entry = findActiveEntry();
+  document.getElementById("active-editor").value = entry ? entry.code : "";
+  renderLineNumbers("active-editor", "active-line-numbers");
 }
 
-function addFile(name = "", code = "", isTarget = false) {
+function addFile(name = "", code = "", isCandidate = false) {
   const id = "f" + nextId++;
-  const makeTarget = isTarget || files.length === 0;
-  if (makeTarget) files.forEach((f) => (f.isTarget = false));
-  files.push({ id, name, code, isTarget: makeTarget });
+  // The very first file added defaults to being a candidate, so the plant
+  // button isn't blocked immediately; every file after that starts
+  // unselected and the user opts it in.
+  const makeCandidate = isCandidate || files.length === 0;
+  files.push({ id, name, code, isCandidate: makeCandidate });
+  return id;
+}
+
+function addTestFile(name = "", code = "") {
+  const id = "t" + nextId++;
+  testFiles.push({ id, name, code });
   return id;
 }
 
 function removeFile(id) {
   const idx = files.findIndex((f) => f.id === id);
   if (idx === -1) return;
-  const wasTarget = files[idx].isTarget;
   files.splice(idx, 1);
-  if (wasTarget && files.length > 0) files[0].isTarget = true;
   if (activeId === id) {
-    selectFile(files.length > 0 ? files[0].id : "TEST");
+    selectFile(files.length > 0 ? files[0].id : (testFiles[0] ? testFiles[0].id : null));
   } else {
     renderTabs();
   }
@@ -315,8 +591,22 @@ function removeFile(id) {
   validatePlantButton();
 }
 
-function setTarget(id) {
-  files.forEach((f) => (f.isTarget = f.id === id));
+function removeTestFile(id) {
+  const idx = testFiles.findIndex((f) => f.id === id);
+  if (idx === -1) return;
+  testFiles.splice(idx, 1);
+  if (activeId === id) {
+    selectFile(files[0] ? files[0].id : (testFiles[0] ? testFiles[0].id : null));
+  } else {
+    renderTabs();
+  }
+  saveToLocalStorage();
+  validatePlantButton();
+}
+
+function toggleCandidate(id) {
+  const f = files.find((f) => f.id === id);
+  if (f) f.isCandidate = !f.isCandidate;
   renderTabs();
   saveToLocalStorage();
   validatePlantButton();
@@ -335,9 +625,9 @@ function renderTabs() {
   bar.innerHTML = "";
   for (const f of files) {
     const tab = document.createElement("div");
-    tab.className = "tab" + (f.id === activeId ? " active" : "") + (f.isTarget ? " is-target" : "");
+    tab.className = "tab" + (f.id === activeId ? " active" : "") + (f.isCandidate ? " is-target" : "");
     tab.innerHTML = `
-      <button type="button" class="tab-star" title="${f.isTarget ? "This file will be mutated" : "Mark as the file to mutate"}">${f.isTarget ? "●" : "○"}</button>
+      <button type="button" class="tab-star" title="${f.isCandidate ? "Eligible for mutation -- click to exclude" : "Include this file in the mutation pool"}">${f.isCandidate ? "●" : "○"}</button>
       <span class="tab-name">${escapeHtml(f.name || "untitled")}</span>
       <button type="button" class="tab-close" title="Remove">&times;</button>
     `;
@@ -347,7 +637,7 @@ function renderTabs() {
     });
     tab.querySelector(".tab-star").addEventListener("click", (e) => {
       e.stopPropagation();
-      setTarget(f.id);
+      toggleCandidate(f.id);
     });
     tab.querySelector(".tab-close").addEventListener("click", (e) => {
       e.stopPropagation();
@@ -356,45 +646,66 @@ function renderTabs() {
     bar.appendChild(tab);
   }
 
-  const addTab = document.createElement("button");
-  addTab.type = "button";
-  addTab.className = "tab add-tab";
-  addTab.textContent = "+";
-  addTab.title = "Add another source file";
-  addTab.addEventListener("click", () => {
+  const addSourceTab = document.createElement("button");
+  addSourceTab.type = "button";
+  addSourceTab.className = "tab add-tab";
+  addSourceTab.textContent = "+";
+  addSourceTab.title = "Add another source file";
+  addSourceTab.addEventListener("click", () => {
     const id = addFile();
     selectFile(id);
     saveToLocalStorage();
     validatePlantButton();
   });
-  bar.appendChild(addTab);
+  bar.appendChild(addSourceTab);
 
-  const testTab = document.createElement("div");
-  testTab.className = "tab test-tab" + (activeId === "TEST" ? " active" : "");
-  testTab.innerHTML = `<span class="tab-icon">T</span><span class="tab-name">${escapeHtml(testFile.name || "test file")}</span>`;
-  testTab.addEventListener("click", () => selectFile("TEST"));
-  bar.appendChild(testTab);
+  const divider = document.createElement("div");
+  divider.className = "tab-divider";
+  bar.appendChild(divider);
+
+  for (const t of testFiles) {
+    const tab = document.createElement("div");
+    tab.className = "tab test-tab" + (t.id === activeId ? " active" : "");
+    tab.innerHTML = `
+      <span class="tab-icon">T</span>
+      <span class="tab-name">${escapeHtml(t.name || "untitled test")}</span>
+      <button type="button" class="tab-close" title="Remove">&times;</button>
+    `;
+    tab.addEventListener("click", (e) => {
+      if (e.target.closest(".tab-close")) return;
+      selectFile(t.id);
+    });
+    tab.querySelector(".tab-close").addEventListener("click", (e) => {
+      e.stopPropagation();
+      removeTestFile(t.id);
+    });
+    bar.appendChild(tab);
+  }
+
+  const addTestTab = document.createElement("button");
+  addTestTab.type = "button";
+  addTestTab.className = "tab add-tab test-tab";
+  addTestTab.textContent = "+";
+  addTestTab.title = "Add another test file";
+  addTestTab.addEventListener("click", () => {
+    const id = addTestFile();
+    selectFile(id);
+    saveToLocalStorage();
+    validatePlantButton();
+  });
+  bar.appendChild(addTestTab);
 }
 
 function renderToolbar() {
+  const entry = findActiveEntry();
   const nameInput = document.getElementById("active-name");
-  if (activeId === "TEST") {
-    nameInput.value = testFile.name;
-    nameInput.placeholder = "test module name, e.g. test_heap";
-  } else {
-    const f = files.find((f) => f.id === activeId);
-    nameInput.value = f ? f.name : "";
-    nameInput.placeholder = "module name, e.g. heap";
-  }
+  nameInput.value = entry ? entry.name : "";
+  nameInput.placeholder = isActiveTest() ? "test module name, e.g. test_heap" : "module name, e.g. heap";
 }
 
 document.getElementById("active-name").addEventListener("input", (e) => {
-  if (activeId === "TEST") {
-    testFile.name = e.target.value;
-  } else {
-    const f = files.find((f) => f.id === activeId);
-    if (f) f.name = e.target.value;
-  }
+  const entry = findActiveEntry();
+  if (entry) entry.name = e.target.value;
   renderTabs();
   saveToLocalStorage();
   validatePlantButton();
@@ -402,8 +713,12 @@ document.getElementById("active-name").addEventListener("input", (e) => {
 
 document.getElementById("active-editor").addEventListener("input", () => {
   commitActiveEditor();
+  renderLineNumbers("active-editor", "active-line-numbers");
   saveToLocalStorage();
   validatePlantButton();
+});
+document.getElementById("active-editor").addEventListener("scroll", () => {
+  document.getElementById("active-line-numbers").scrollTop = document.getElementById("active-editor").scrollTop;
 });
 
 document.getElementById("upload-source-files").addEventListener("change", async (e) => {
@@ -412,10 +727,15 @@ document.getElementById("upload-source-files").addEventListener("change", async 
   for (const file of uploaded) {
     const text = await file.text();
     const name = stripPyExtension(file.name);
-    if (name.startsWith("test_") && !testFile.name.trim() && !testFile.code.trim()) {
-      testFile.name = name;
-      testFile.code = text;
-      lastTouched = "TEST";
+    if (name.startsWith("test_")) {
+      const emptyTest = testFiles.find((f) => !f.name.trim() && !f.code.trim());
+      if (emptyTest) {
+        emptyTest.name = name;
+        emptyTest.code = text;
+        lastTouched = emptyTest.id;
+      } else {
+        lastTouched = addTestFile(name, text);
+      }
       continue;
     }
     const empty = files.find((f) => !f.name.trim() && !f.code.trim());
@@ -438,51 +758,73 @@ document.getElementById("upload-source-files").addEventListener("change", async 
   e.target.value = "";
 });
 
-document.getElementById("upload-test-file").addEventListener("change", async (e) => {
-  const file = e.target.files[0];
-  if (!file) return;
-  const text = await file.text();
-  testFile.name = stripPyExtension(file.name);
-  testFile.code = text;
-  selectFile("TEST");
+document.getElementById("upload-test-files").addEventListener("change", async (e) => {
+  const uploaded = [...e.target.files];
+  let lastTouched = null;
+  for (const file of uploaded) {
+    const text = await file.text();
+    const name = stripPyExtension(file.name);
+    const empty = testFiles.find((f) => !f.name.trim() && !f.code.trim());
+    if (empty) {
+      empty.name = name;
+      empty.code = text;
+      lastTouched = empty.id;
+    } else {
+      lastTouched = addTestFile(name, text);
+    }
+  }
+  if (lastTouched) selectFile(lastTouched);
   saveToLocalStorage();
   validatePlantButton();
   e.target.value = "";
 });
 
-function getSourcesAndTarget() {
+function getSourcesAndCandidates() {
   commitActiveEditor();
   const sources = {};
-  let target = null;
+  const candidates = [];
   for (const f of files) {
     const name = f.name.trim();
     const code = f.code;
     if (!name || !code.trim()) continue;
     sources[name] = code;
-    if (f.isTarget) target = name;
+    if (f.isCandidate) candidates.push(name);
   }
-  return { sources, target };
+  return { sources, candidates };
+}
+
+function getTestsPayload() {
+  commitActiveEditor();
+  const tests = {};
+  for (const t of testFiles) {
+    const name = t.name.trim();
+    const code = t.code;
+    if (!name || !code.trim()) continue;
+    tests[name] = code;
+  }
+  return tests;
 }
 
 function validatePlantButton() {
-  const { sources, target } = getSourcesAndTarget();
-  const testName = testFile.name.trim();
-  const testCode = testFile.code.trim();
+  const { sources, candidates } = getSourcesAndCandidates();
+  const tests = getTestsPayload();
 
   const missing = [];
   if (!pyodide) missing.push("Python runtime is still loading");
   if (Object.keys(sources).length === 0) {
     missing.push("a source file with both a module name and code");
-  } else if (!target) {
-    const anyTargetFlagged = files.some((f) => f.isTarget);
+  } else if (candidates.length === 0) {
+    const anyCandidateFlagged = files.some((f) => f.isCandidate);
     missing.push(
-      anyTargetFlagged
-        ? "the file marked to be mutated needs both a module name and code"
-        : "mark a file to be mutated (click the circle on its tab)"
+      anyCandidateFlagged
+        ? "the file(s) marked as mutation candidates need both a module name and code"
+        : "include at least one file in the mutation pool (click the circle on its tab)"
     );
   }
-  if (!testName) missing.push("a test module name");
-  if (!testCode) missing.push("your test file's code");
+  if (Object.keys(tests).length === 0) missing.push("at least one test file with both a module name and code");
+  if (!document.getElementById("use-generic-operators").checked && !document.getElementById("use-project-operators").checked) {
+    missing.push("at least one operator set checked (generic and/or project-specific)");
+  }
 
   document.getElementById("plant-btn").disabled = missing.length > 0;
   document.getElementById("plant-readiness").textContent =
@@ -492,7 +834,11 @@ function validatePlantButton() {
 function saveToLocalStorage() {
   try {
     commitActiveEditor();
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ files, testFile }));
+    const operatorPrefs = {
+      generic: document.getElementById("use-generic-operators").checked,
+      project: document.getElementById("use-project-operators").checked,
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ files, testFiles, operatorPrefs }));
   } catch (err) {
     // localStorage can throw in private browsing / disabled-storage contexts -- non-fatal
   }
@@ -507,16 +853,66 @@ function loadFromLocalStorage() {
     payload = null;
   }
   if (payload && Array.isArray(payload.files) && payload.files.length) {
-    files = payload.files.map((f) => ({ id: "f" + nextId++, name: f.name || "", code: f.code || "", isTarget: !!f.isTarget }));
-    if (!files.some((f) => f.isTarget)) files[0].isTarget = true;
-    testFile = { name: (payload.testFile && payload.testFile.name) || "", code: (payload.testFile && payload.testFile.code) || "" };
+    files = payload.files.map((f) => ({ id: "f" + nextId++, name: f.name || "", code: f.code || "", isCandidate: !!f.isCandidate }));
+    if (!files.some((f) => f.isCandidate)) files[0].isCandidate = true;
+    testFiles = Array.isArray(payload.testFiles)
+      ? payload.testFiles.map((f) => ({ id: "t" + nextId++, name: f.name || "", code: f.code || "" }))
+      : [];
+    if (payload.operatorPrefs) {
+      document.getElementById("use-generic-operators").checked = payload.operatorPrefs.generic !== false;
+      document.getElementById("use-project-operators").checked = payload.operatorPrefs.project !== false;
+    }
   } else {
     addFile("", "", true);
-    testFile = { name: "", code: "" };
   }
-  selectFile(files[0] ? files[0].id : "TEST");
+  if (testFiles.length === 0) addTestFile("", "");
+  selectFile(files[0].id);
   validatePlantButton();
 }
+
+// -- Hunt mode: fixed snapshot of candidate source files ---------------------
+
+function commitHuntActiveEditor() {
+  const code = document.getElementById("hunt-active-editor").value;
+  const f = huntFiles.find((f) => f.id === huntActiveId);
+  if (f) f.code = code;
+}
+
+function loadHuntActiveEditor() {
+  const editor = document.getElementById("hunt-active-editor");
+  const f = huntFiles.find((f) => f.id === huntActiveId);
+  editor.value = f ? f.code : "";
+  renderLineNumbers("hunt-active-editor", "hunt-line-numbers");
+}
+
+document.getElementById("hunt-active-editor").addEventListener("input", () => {
+  renderLineNumbers("hunt-active-editor", "hunt-line-numbers");
+});
+document.getElementById("hunt-active-editor").addEventListener("scroll", () => {
+  document.getElementById("hunt-line-numbers").scrollTop = document.getElementById("hunt-active-editor").scrollTop;
+});
+
+function selectHuntFile(id) {
+  commitHuntActiveEditor();
+  huntActiveId = id;
+  loadHuntActiveEditor();
+  renderHuntTabs();
+  document.getElementById("hunt-active-name").value = huntFiles.find((f) => f.id === id)?.name || "";
+}
+
+function renderHuntTabs() {
+  const bar = document.getElementById("hunt-tab-bar");
+  bar.innerHTML = "";
+  for (const f of huntFiles) {
+    const tab = document.createElement("div");
+    tab.className = "tab" + (f.id === huntActiveId ? " active" : "");
+    tab.innerHTML = `<span class="tab-name">${escapeHtml(f.name)}</span>`;
+    tab.addEventListener("click", () => selectHuntFile(f.id));
+    bar.appendChild(tab);
+  }
+}
+
+// -- shared: Pyodide calls, plant, run tests, reveal -------------------------
 
 function callPy(fnName, payloadObj) {
   const fn = pyodide.globals.get(fnName);
@@ -547,43 +943,71 @@ function showDiff() {
   el.hidden = false;
 }
 
-document.getElementById("plant-btn").addEventListener("click", () => {
-  const { sources, target } = getSourcesAndTarget();
-  const testName = testFile.name.trim();
-  const testSource = testFile.code;
+function showTestOutput(output, passed) {
+  const el = document.getElementById("test-output");
+  el.textContent = output || "(no output)";
+  el.className = passed ? "ok" : "bad";
+  el.hidden = false;
+}
 
-  const result = callPy("plant_json", { target, sources, test_name: testName, test_source: testSource });
+document.getElementById("use-generic-operators").addEventListener("change", () => { saveToLocalStorage(); validatePlantButton(); });
+document.getElementById("use-project-operators").addEventListener("change", () => { saveToLocalStorage(); validatePlantButton(); });
+
+function currentOperatorSet() {
+  const generic = document.getElementById("use-generic-operators").checked;
+  const project = document.getElementById("use-project-operators").checked;
+  if (generic && project) return "all";
+  if (generic) return "generic";
+  if (project) return "project";
+  return "all"; // shouldn't happen -- plant-btn is disabled when both are unchecked
+}
+
+document.getElementById("plant-btn").addEventListener("click", () => {
+  const { sources, candidates } = getSourcesAndCandidates();
+  const tests = getTestsPayload();
+
+  const result = callPy("plant_json", {
+    candidates, sources, tests, operator_set: currentOperatorSet(),
+  });
   if (!result.ok) {
     setStatus(result.error);
     return;
   }
   setStatus("Ready.");
-  currentTarget = target;
-  currentTestName = testName;
-  plantedOriginal = sources[target];
+  currentTarget = result.target; // which file the engine actually landed the mutation in
+  currentTestNames = Object.keys(tests);
+  plantedOriginal = result.original_source; // cleaned (comments/docstrings stripped) by the engine
   plantedMutated = result.mutated_source;
   attempts = 0;
 
-  document.getElementById("target-label").textContent = `Target: ${target}.py`;
-  document.getElementById("mutated-editor").value = result.mutated_source;
+  // Populate Hunt mode with every candidate source file (all cleaned), the
+  // actually-mutated file's content already swapped in -- Hunt mode never
+  // shows which one that is, only that it's one of the marked candidates.
+  huntFiles = Object.entries(result.cleaned_sources).map(([name, code]) => ({ id: "h" + nextId++, name, code }));
+  const huntTarget = huntFiles.find((f) => f.name === currentTarget) || huntFiles[0];
+  huntActiveId = huntTarget.id;
+  huntPlanted = true;
+  document.getElementById("nav-hunt").disabled = false;
+  document.getElementById("hunt-info").textContent =
+    `The bug is in one of: ${candidates.map((n) => n + ".py").join(", ")}. Other tabs are shown for reference only. Click between tabs to inspect all of them.`;
+  renderHuntTabs();
+  loadHuntActiveEditor();
+  document.getElementById("hunt-active-name").value = huntTarget.name;
+
   document.getElementById("reveal-btn").hidden = true;
   hideDiff();
+  document.getElementById("test-output").hidden = true;
   showResult("", "");
-  document.getElementById("mutated-panel").hidden = false;
-  document.getElementById("mutated-panel").scrollIntoView({ behavior: "smooth", block: "start" });
+  switchMode("hunt");
 });
 
-document.getElementById("check-btn").addEventListener("click", () => {
-  const { sources } = getSourcesAndTarget();
-  const allModuleNames = [...Object.keys(sources), currentTestName];
-  const candidateSource = document.getElementById("mutated-editor").value;
+document.getElementById("run-tests-btn").addEventListener("click", () => {
+  commitHuntActiveEditor();
+  const sources = {};
+  for (const f of huntFiles) sources[f.name] = f.code;
 
-  const result = callPy("check_fix_json", {
-    target: currentTarget,
-    candidate_source: candidateSource,
-    all_module_names: allModuleNames,
-    test_name: currentTestName,
-  });
+  const result = callPy("check_fix_json", { sources, test_names: currentTestNames });
+  showTestOutput(result.output, result.passed);
 
   if (result.passed) {
     showResult("Fixed it! Tests pass.", "ok");
@@ -603,17 +1027,21 @@ document.getElementById("reveal-btn").addEventListener("click", () => {
 });
 
 document.getElementById("new-mutation-btn").addEventListener("click", () => {
+  switchMode("upload");
   document.getElementById("plant-btn").click();
 });
 
 async function boot() {
+  await loadProfiles(); // independent of Pyodide -- let the dropdown work immediately
   pyodide = await loadPyodide();
-  const [operatorsSrc, engineSrc] = await Promise.all([
-    fetch("py/operators.py").then((r) => r.text()),
-    fetch("py/web_engine.py").then((r) => r.text()),
+  const [operatorsSrc, projectOperatorsSrc, engineSrc] = await Promise.all([
+    fetch("py/operators.py", { cache: "no-store" }).then((r) => r.text()),
+    fetch("py/project_operators.py", { cache: "no-store" }).then((r) => r.text()),
+    fetch("py/web_engine.py", { cache: "no-store" }).then((r) => r.text()),
   ]);
   pyodide.FS.mkdirTree("/py");
   pyodide.FS.writeFile("/py/operators.py", operatorsSrc);
+  pyodide.FS.writeFile("/py/project_operators.py", projectOperatorsSrc);
   pyodide.FS.writeFile("/py/web_engine.py", engineSrc);
   pyodide.runPython(`
 import sys
